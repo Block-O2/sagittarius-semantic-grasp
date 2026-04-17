@@ -33,11 +33,13 @@
   <arg name="pick_z" default="0.01"/>
   <arg name="publish_annotated_image" default="true"/>
   <arg name="annotated_image_topic" default="/language_guided_grasp/annotated_image"/>
+  <arg name="state_topic" default="/language_guided_grasp/state"/>
   <arg name="save_annotated_image" default="true"/>
   <arg name="annotated_image_path" default="/tmp/language_guided_grasp_latest.jpg"/>
   <arg name="allow_start_without_groundingdino" default="false"/>
   <arg name="allow_start_without_backend" default="$(arg allow_start_without_groundingdino)"/>
   <arg name="drop_after_grasp" default="true"/>
+  <arg name="clear_target_after_success" default="true"/>
   <arg name="drop_x" default="0.15"/>
   <arg name="drop_y" default="0.24"/>
   <arg name="drop_z" default="0.20"/>
@@ -63,11 +65,13 @@
     <param name ="pick_z" value = "$(arg pick_z)"/>
     <param name ="publish_annotated_image" value = "$(arg publish_annotated_image)"/>
     <param name ="annotated_image_topic" value = "$(arg annotated_image_topic)"/>
+    <param name ="state_topic" value = "$(arg state_topic)"/>
     <param name ="save_annotated_image" value = "$(arg save_annotated_image)"/>
     <param name ="annotated_image_path" value = "$(arg annotated_image_path)"/>
     <param name ="allow_start_without_groundingdino" value = "$(arg allow_start_without_groundingdino)"/>
     <param name ="allow_start_without_backend" value = "$(arg allow_start_without_backend)"/>
     <param name ="drop_after_grasp" value = "$(arg drop_after_grasp)"/>
+    <param name ="clear_target_after_success" value = "$(arg clear_target_after_success)"/>
     <param name ="drop_x" value = "$(arg drop_x)"/>
     <param name ="drop_y" value = "$(arg drop_y)"/>
     <param name ="drop_z" value = "$(arg drop_z)"/>

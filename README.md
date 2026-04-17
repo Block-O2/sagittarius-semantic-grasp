@@ -12,6 +12,22 @@
 
 机械臂执行侧尽量保持原样，仍然复用 Sagittarius MoveIt、底层 SDK 和 `sgr_ctrl` action，不重写整套运动控制。
 
+## 项目亮点 / Key Contributions
+
+这个项目的价值不只是“换了一个检测模型”，而是把原本很固定的颜色抓取例程，推进成一个更接近真实语言引导抓取系统的原型：
+
+- 从基于 HSV 阈值的规则式颜色抓取，升级为基于 GroundingDINO 的语言条件目标抓取
+- 支持语义/类别级目标描述，例如 `banana`、`bottle`、`cube`，不再局限于红绿蓝色块
+- 保留原有 Sagittarius 机械臂执行链路，低侵入复用 MoveIt、SDK 和 `sgr_ctrl` action
+- 保留 `vision_config.yaml` 的像素到机械臂平面坐标映射，避免重新标定整套控制链路
+- 增加安全决策层：无检测、低置信度、无效文本时不触发抓取，把“安全不执行”作为明确行为
+- 增加连续帧稳定检测和 busy 保护，降低瞬时误检或重复触发导致的误抓风险
+- 增加标注图和状态话题，方便演示时解释“模型看到了什么、为什么抓/为什么不抓”
+- 提供静态图片可控验证模式，在 WSL 相机/串口不稳定时仍然可以复现实验链路
+- 架构正在向可插拔感知后端演进，未来可以接入 YOLO-World、OWL-ViT、Grounded-SAM 等模型
+- 保留未来双机部署可能性：一台机器跑大模型推理，另一台机器负责相机和机械臂控制
+- 面向资源受限、硬件不稳定环境做了工程化折中，更符合学生项目真实落地过程
+
 ## 当前状态
 
 已确认可以工作的部分：
@@ -21,6 +37,8 @@
 - 测试图片代替相机的静态验证链路已经跑通
 - 检测结果可以继续进入原有 `sgr_ctrl` 抓取执行链路
 - `vision_config.yaml` 线性回归映射仍然保留
+- 标注图输出和状态话题可以用于演示和调试
+- busy 期间收到的新目标会先延后保存，避免中途打断正在执行的抓取
 
 当前主要限制：
 
@@ -84,7 +102,7 @@ src/sagittarius_arm_ros/sagittarius_perception/sagittarius_object_color_detector
 
 核心职责：
 
-- `language_guided_grasp.py`：ROS 编排节点，负责接收图像和文本、调用感知后端、稳定判断、坐标映射、触发抓取
+- `language_guided_grasp.py`：ROS 编排节点，负责接收图像和文本、调用感知后端、状态流管理、稳定判断、坐标映射、触发抓取
 - `perception_framework/detection_types.py`：统一检测结果结构 `DetectionResult` 和 `DetectionBox`
 - `perception_framework/backends/base.py`：所有感知后端的抽象接口 `BasePerceptionBackend`
 - `perception_framework/backends/grounding_dino.py`：GroundingDINO 后端实现
@@ -150,6 +168,39 @@ DetectionBox
 ```
 
 下游抓取逻辑只依赖统一结构，不直接依赖 GroundingDINO 的 tensor 输出。这样以后换模型时，尽量只新增 backend，不动抓取执行侧。
+
+## 运行状态流
+
+主节点现在维护一个轻量状态流，用于减少重复触发，也方便演示和排查：
+
+```text
+waiting_for_target -> detecting -> target_locked -> grasping -> placing -> done
+                                      └──────────── failed
+```
+
+状态含义：
+
+- `waiting_for_target`：节点已启动，等待 `/grasp_target_text` 输入
+- `detecting`：已有目标文本，正在对图像做语言条件检测
+- `target_locked`：目标中心在连续帧中稳定，准备进入抓取
+- `grasping`：正在调用 `sgr_ctrl` 执行抓取
+- `placing`：抓取成功后正在执行可选放置动作
+- `done`：一次抓取流程成功结束
+- `failed`：当前请求未满足执行条件，例如无检测、低置信度、后端不可用或抓取失败
+
+状态会发布到：
+
+```text
+/language_guided_grasp/state
+```
+
+查看状态：
+
+```bash
+rostopic echo /language_guided_grasp/state
+```
+
+如果抓取执行期间又收到新的目标文本，节点不会立即打断机械臂动作，而是先缓存为 pending target，当前动作结束后再进入下一轮检测。
 
 ## 安全决策与可视化
 
@@ -217,9 +268,11 @@ roslaunch sagittarius_object_color_detector language_guided_grasp.launch \
   framerate:=30 \
   min_grasp_score:=0.35 \
   publish_annotated_image:=true \
+  state_topic:=/language_guided_grasp/state \
   groundingdino_config:=/mnt/d/ai_models/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py \
   groundingdino_weights:=/mnt/d/ai_models/GroundingDINO/weights/groundingdino_swint_ogc.pth \
-  drop_after_grasp:=false
+  drop_after_grasp:=false \
+  clear_target_after_success:=true
 ```
 
 ### 测试图片代替相机
@@ -230,9 +283,11 @@ roslaunch sagittarius_object_color_detector language_guided_grasp_image_test.lau
   min_grasp_score:=0.35 \
   save_annotated_image:=true \
   annotated_image_path:=/tmp/language_guided_grasp_latest.jpg \
+  state_topic:=/language_guided_grasp/state \
   groundingdino_config:=/mnt/d/ai_models/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py \
   groundingdino_weights:=/mnt/d/ai_models/GroundingDINO/weights/groundingdino_swint_ogc.pth \
-  drop_after_grasp:=false
+  drop_after_grasp:=false \
+  clear_target_after_success:=true
 ```
 
 默认测试图：
@@ -249,9 +304,11 @@ roslaunch sagittarius_object_color_detector language_guided_grasp_image_test.lau
   device:=cpu \
   save_annotated_image:=true \
   annotated_image_path:=/tmp/language_guided_grasp_latest.jpg \
+  state_topic:=/language_guided_grasp/state \
   groundingdino_config:=/mnt/d/ai_models/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py \
   groundingdino_weights:=/mnt/d/ai_models/GroundingDINO/weights/groundingdino_swint_ogc.pth \
-  drop_after_grasp:=false
+  drop_after_grasp:=false \
+  clear_target_after_success:=true
 ```
 
 发送目标文本：
@@ -310,6 +367,7 @@ annotated_output: /tmp/language_guided_grasp_smoke.jpg
 4. 多物体场景中只抓取指定目标：例如画面里同时有方块和瓶子，只发布 `bottle`
 5. 请求不存在的目标：例如发布 `airplane`，确认状态为 `no_detection` 且机械臂不动作
 6. 静态图片演示：运行 `language_guided_grasp_image_test.launch`，查看 `/tmp/language_guided_grasp_latest.jpg`
+7. 可选 pick-and-place：设置 `drop_after_grasp:=true`，抓取成功后放到固定位置
 
 常用目标文本：
 
@@ -319,6 +377,19 @@ rostopic pub /grasp_target_text std_msgs/String "data: 'blue cube'" -1
 rostopic pub /grasp_target_text std_msgs/String "data: 'banana'" -1
 rostopic pub /grasp_target_text std_msgs/String "data: 'bottle'" -1
 rostopic pub /grasp_target_text std_msgs/String "data: 'airplane'" -1
+```
+
+演示时建议同时打开两个观察窗口：
+
+```bash
+rostopic echo /language_guided_grasp/state
+rostopic hz /language_guided_grasp/annotated_image
+```
+
+如果是静态图片模式，也可以直接查看保存的标注图：
+
+```bash
+xdg-open /tmp/language_guided_grasp_latest.jpg
 ```
 
 ## 如何增加新的感知后端
@@ -332,6 +403,19 @@ rostopic pub /grasp_target_text std_msgs/String "data: 'airplane'" -1
 5. 启动时传入 `perception_backend:=你的后端名`
 
 新后端不要直接控制机械臂，不要做像素到机械臂坐标映射，也不要直接调用 `sgr_ctrl`。这些都由主编排节点统一处理。
+
+## 未来工作 / Planned Extensions
+
+后续如果继续扩展，建议优先沿着这些方向推进：
+
+- 插入更多开放词汇感知后端，例如 YOLO-World、OWL-ViT、Grounded-SAM，并通过 `perception_backend` 参数切换
+- 把语言目标从单一短语扩展到更复杂指令，例如“抓左边的瓶子”“抓离机械臂最近的香蕉”
+- 增加更清晰的双机通信方案：感知机器只发布轻量结果，控制机器只负责映射和执行
+- 在原生 Ubuntu 或更稳定硬件环境下验证真实相机闭环，降低 WSL usbipd 带来的运行不确定性
+- 改进相机标定和手眼标定，让像素到机械臂坐标的映射更稳健
+- 扩展 pick-and-place 策略，例如根据类别选择不同放置区，而不是固定放置点
+- 增加更完整的状态机和恢复策略，例如抓取失败后自动回退、重新检测或请求人工确认
+- 在当前语言抓取基础上进一步接入 OpenVLA / VLM 策略，用视觉语言模型产生更高层任务决策
 
 ## 兼容说明
 

@@ -18,6 +18,15 @@ from perception_framework.stability import CenterStabilityFilter
 from perception_framework.visualization import draw_detection_overlay
 
 
+STATE_WAITING_FOR_TARGET = "waiting_for_target"
+STATE_DETECTING = "detecting"
+STATE_TARGET_LOCKED = "target_locked"
+STATE_GRASPING = "grasping"
+STATE_PLACING = "placing"
+STATE_DONE = "done"
+STATE_FAILED = "failed"
+
+
 class LanguageGuidedGraspNode:
     """Orchestrates image/text input, perception, mapping, and grasp execution.
 
@@ -61,6 +70,9 @@ class LanguageGuidedGraspNode:
             float(rospy.get_param("~drop_y", 0.24)),
             float(rospy.get_param("~drop_z", 0.20)),
         )
+        self.clear_target_after_success = self._get_bool_param(
+            "~clear_target_after_success", True
+        )
         self.min_detection_interval = float(
             rospy.get_param("~min_detection_interval", 0.2)
         )
@@ -69,6 +81,9 @@ class LanguageGuidedGraspNode:
         )
         self.annotated_image_topic = rospy.get_param(
             "~annotated_image_topic", "/language_guided_grasp/annotated_image"
+        )
+        self.state_topic = rospy.get_param(
+            "~state_topic", "/language_guided_grasp/state"
         )
         self.save_annotated_image = self._get_bool_param(
             "~save_annotated_image", False
@@ -88,9 +103,13 @@ class LanguageGuidedGraspNode:
         self.current_target_text = self._normalize_target_text(
             self.default_target_text
         )
+        self.pending_target_text = None
         self.busy = False
         self.backend_ready = False
         self.last_detection_time = rospy.Time(0)
+        self.pipeline_state = None
+        self.pipeline_state_reason = ""
+        self.state_pub = None
 
         self.mapper = VisionPlaneMapper(rospy.get_param("~vision_config"))
         rospy.loginfo(
@@ -123,6 +142,12 @@ class LanguageGuidedGraspNode:
             self._target_callback,
             queue_size=1,
         )
+        self.state_pub = rospy.Publisher(
+            self.state_topic,
+            String,
+            queue_size=1,
+            latch=True,
+        )
         self.annotated_image_pub = None
         if self.publish_annotated_image:
             self.annotated_image_pub = rospy.Publisher(
@@ -137,6 +162,11 @@ class LanguageGuidedGraspNode:
             queue_size=1,
             buff_size=2 ** 24,
         )
+
+        initial_state = (
+            STATE_DETECTING if self.current_target_text else STATE_WAITING_FOR_TARGET
+        )
+        self._set_state(initial_state, "startup")
 
         if self.current_target_text:
             rospy.loginfo(
@@ -153,6 +183,7 @@ class LanguageGuidedGraspNode:
             self.min_grasp_score,
             self.annotated_image_topic if self.publish_annotated_image else "disabled",
         )
+        rospy.loginfo("Pipeline state topic: %s", self.state_topic)
         if not self.backend_ready:
             rospy.logwarn(
                 "Perception backend is not ready. Detection is disabled, but arm/camera/topic integration can still be tested."
@@ -189,10 +220,25 @@ class LanguageGuidedGraspNode:
 
     def _target_callback(self, msg):
         new_target = self._normalize_target_text(msg.data)
+        deferred = False
         with self.state_lock:
-            self.current_target_text = new_target
-            self.stability_filter.reset()
+            if self.busy:
+                self.pending_target_text = new_target
+                deferred = True
+            else:
+                self.current_target_text = new_target
+                self.stability_filter.reset()
+                if new_target:
+                    self._set_state(STATE_DETECTING, "new target received")
+                else:
+                    self._set_state(STATE_WAITING_FOR_TARGET, "target cleared")
 
+        if deferred:
+            rospy.loginfo(
+                "Node is busy; deferred new grasp target text: '%s'",
+                new_target,
+            )
+            return
         if new_target:
             rospy.loginfo("Updated grasp target text: '%s'", new_target)
         else:
@@ -201,11 +247,18 @@ class LanguageGuidedGraspNode:
     def _image_callback(self, msg):
         now = rospy.Time.now()
         with self.state_lock:
-            if self.busy or not self.backend_ready:
+            if self.busy:
                 return
             target_text = self.current_target_text
             if not target_text:
+                if self.pipeline_state != STATE_WAITING_FOR_TARGET:
+                    self._set_state(STATE_WAITING_FOR_TARGET, "no target text")
                 return
+            if not self.backend_ready:
+                self._set_state(STATE_FAILED, "perception_backend_not_ready")
+                return
+            if self.pipeline_state in (STATE_WAITING_FOR_TARGET, STATE_DONE):
+                self._set_state(STATE_DETECTING, "running perception")
             if self.min_detection_interval > 0.0:
                 elapsed = (now - self.last_detection_time).to_sec()
                 if elapsed < self.min_detection_interval:
@@ -232,6 +285,7 @@ class LanguageGuidedGraspNode:
             with self.state_lock:
                 if not self.busy and target_text == self.current_target_text:
                     self.stability_filter.reset()
+                    self._set_state(STATE_FAILED, decision.status)
             return
 
         selected_box = decision.selected_box
@@ -241,11 +295,14 @@ class LanguageGuidedGraspNode:
             if self.busy or target_text != self.current_target_text:
                 return
 
+            if self.pipeline_state == STATE_FAILED:
+                self._set_state(STATE_DETECTING, "candidate found")
             self.stability_filter.add(selected_box.center)
             if self.stability_filter.is_stable():
                 stable_center = self.stability_filter.average_center()
                 self.stability_filter.reset()
                 self.busy = True
+                self._set_state(STATE_TARGET_LOCKED, "stable detection")
                 start_grasp = True
 
         if start_grasp:
@@ -314,6 +371,7 @@ class LanguageGuidedGraspNode:
 
     def _grasp_target(self, center, target_text):
         grasp_success = False
+        self._set_state(STATE_GRASPING, "executing pick")
         try:
             grasp_x, grasp_y = self.mapper.map_pixel_center(center)
             rospy.loginfo(
@@ -328,6 +386,7 @@ class LanguageGuidedGraspNode:
             if grasp_success:
                 rospy.loginfo("Grasp succeeded for target '%s'", target_text)
                 if self.drop_after_grasp:
+                    self._set_state(STATE_PLACING, "executing fixed drop")
                     if self.executor.execute_drop():
                         rospy.loginfo("Drop succeeded at fixed position")
                     else:
@@ -339,10 +398,39 @@ class LanguageGuidedGraspNode:
         finally:
             self.executor.move_to_search_pose()
             with self.state_lock:
-                if grasp_success and self.current_target_text == target_text:
+                if (
+                    grasp_success
+                    and self.clear_target_after_success
+                    and self.current_target_text == target_text
+                ):
                     self.current_target_text = ""
+                if self.pending_target_text is not None:
+                    self.current_target_text = self.pending_target_text
+                    self.pending_target_text = None
                 self.stability_filter.reset()
                 self.busy = False
+                if grasp_success:
+                    self._set_state(STATE_DONE, "grasp succeeded")
+                else:
+                    self._set_state(STATE_FAILED, "grasp failed")
+
+                if self.current_target_text:
+                    self._set_state(STATE_DETECTING, "ready for target")
+                else:
+                    self._set_state(STATE_WAITING_FOR_TARGET, "target complete")
+
+    def _set_state(self, state, reason=""):
+        if (
+            self.pipeline_state == state
+            and self.pipeline_state_reason == reason
+        ):
+            return
+        self.pipeline_state = state
+        self.pipeline_state_reason = reason
+        state_text = "{}: {}".format(state, reason) if reason else state
+        rospy.loginfo("Pipeline state -> %s", state_text)
+        if self.state_pub is not None:
+            self.state_pub.publish(String(data=state_text))
 
     def _normalize_target_text(self, text):
         return text.strip()
