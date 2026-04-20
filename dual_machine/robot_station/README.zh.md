@@ -145,6 +145,105 @@ source devel/setup.bash
 
 下面这组命令适合实验室电脑，也就是连接机械臂和摄像头的机器。推荐实验室电脑作为 ROS master。
 
+## 零基础启动顺序：实验室电脑要开哪些终端
+
+如果你不熟悉 ROS，按这个顺序做。每个“终端”都要新开一个窗口或标签页，不要在同一个终端里把前一个正在运行的程序停掉。
+
+### Robot 终端 1：启动 ROS master
+
+这个终端只负责 `roscore`，启动后不要关闭。
+
+```bash
+cd ~/sagittarius_ws
+source dual_machine/robot_station/env.local.sh
+roscore
+```
+
+看到类似下面的内容就说明 ROS master 已经启动：
+
+```text
+started core service [/rosout]
+```
+
+保持这个终端开着。后面如果按 `Ctrl-C` 关掉它，其他 ROS 节点都会断。
+
+### Robot 终端 2：启动机械臂、相机和执行节点
+
+新开第二个终端，运行：
+
+```bash
+cd ~/sagittarius_ws
+source dual_machine/robot_station/env.local.sh
+bash dual_machine/robot_station/run_robot_station.sh
+```
+
+这个终端也不要关闭。它会启动：
+
+- Sagittarius 机械臂驱动
+- MoveIt
+- `sgr_ctrl`
+- USB 摄像头
+- `language_guided_executor.py`
+
+看到类似下面信息，说明机械臂执行侧基本起来了：
+
+```text
+Ready to take commands
+Robot station executor ready
+```
+
+### Robot 终端 3：观察状态
+
+新开第三个终端，用来查看状态，不会影响前两个终端：
+
+```bash
+cd ~/sagittarius_ws
+source dual_machine/robot_station/env.local.sh
+rostopic echo /language_guided_executor/state
+```
+
+如果想看相机是否有图像：
+
+```bash
+rostopic hz /usb_cam/image_raw
+```
+
+如果想看 AI Station 有没有发检测结果：
+
+```bash
+rostopic echo /language_guided_grasp/target_observation
+```
+
+### Robot 终端 4：备用调试终端
+
+如果现场需要排查问题，可以再开一个终端：
+
+```bash
+cd ~/sagittarius_ws
+source dual_machine/robot_station/env.local.sh
+rostopic list
+rosnode list
+```
+
+常用检查：
+
+```bash
+rostopic list | grep -E 'image_raw|target_observation|execution_feedback|executor|sgr_ctrl'
+rosnode list | grep -E 'sdk_sagittarius_arm|move_group|sgr_ctrl|language_guided_executor|usb_cam'
+```
+
+### 正式运行时 Robot Station 终端状态
+
+正式 demo 时，实验室电脑至少应该有这些终端保持打开：
+
+```text
+Robot 终端 1：roscore，不能关
+Robot 终端 2：run_robot_station.sh，不能关
+Robot 终端 3：rostopic echo /language_guided_executor/state，用来看状态
+```
+
+AI Station 会在你的电脑上单独启动，不在实验室电脑上跑 GroundingDINO。
+
 ### 1. 设置网络和工作空间
 
 先复制环境模板并按实验室实际 IP 修改：

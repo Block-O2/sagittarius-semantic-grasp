@@ -140,6 +140,106 @@ source devel/setup.bash
 
 下面这组命令适合你的电脑，也就是负责 GroundingDINO 推理的机器。实验室电脑需要先启动 ROS master，或者至少保证 `ROS_MASTER_URI` 指向实验室电脑。
 
+## 零基础启动顺序：你的电脑要开哪些终端
+
+如果你不熟悉 ROS，按这个顺序做。每个“终端”都要新开一个窗口或标签页，不要在同一个终端里把前一个正在运行的程序停掉。
+
+重要：AI Station 不启动 `roscore`。`roscore` 只在实验室电脑 Robot Station 上启动一次。
+
+### AI 终端 1：连接实验室电脑 ROS master 并启动推理节点
+
+新开一个终端：
+
+```bash
+cd ~/sagittarius_ws
+source dual_machine/ai_station/env.local.sh
+bash dual_machine/ai_station/run_ai_station.sh
+```
+
+这个终端不要关闭。它会启动：
+
+- GroundingDINO 推理
+- `/usb_cam/image_raw` 图像订阅
+- `/grasp_target_text` 文本订阅
+- `/language_guided_grasp/target_observation` 检测结果发布
+- `/language_guided_perception/annotated_image` 标注图发布
+
+看到类似下面信息，说明 AI 推理节点已经启动：
+
+```text
+AI station perception node ready
+Loaded perception backend 'grounding_dino'
+```
+
+如果第一次加载模型比较慢，等一会儿是正常的。
+
+### AI 终端 2：发送目标文本
+
+新开第二个终端，用来发布你想抓的目标：
+
+```bash
+cd ~/sagittarius_ws
+source dual_machine/ai_station/env.local.sh
+rostopic pub /grasp_target_text std_msgs/String "data: 'red block'" -1
+```
+
+如果要换目标，就重新发布：
+
+```bash
+rostopic pub /grasp_target_text std_msgs/String "data: 'banana'" -1
+rostopic pub /grasp_target_text std_msgs/String "data: 'bottle'" -1
+```
+
+### AI 终端 3：观察推理状态
+
+新开第三个终端：
+
+```bash
+cd ~/sagittarius_ws
+source dual_machine/ai_station/env.local.sh
+rostopic echo /language_guided_perception/state
+```
+
+如果想看发给实验室电脑的检测结果：
+
+```bash
+rostopic echo /language_guided_grasp/target_observation
+```
+
+如果想确认能收到实验室摄像头图像：
+
+```bash
+rostopic hz /usb_cam/image_raw
+```
+
+如果想确认标注图有输出：
+
+```bash
+rostopic hz /language_guided_perception/annotated_image
+```
+
+### AI 终端 4：可选调试终端
+
+如果现场需要排查问题，可以再开一个终端：
+
+```bash
+cd ~/sagittarius_ws
+source dual_machine/ai_station/env.local.sh
+rostopic list | grep -E 'grasp_target_text|target_observation|annotated_image|state|image_raw'
+```
+
+### 正式运行时 AI Station 终端状态
+
+正式 demo 时，你的电脑至少应该有这些终端保持打开：
+
+```text
+AI 终端 1：run_ai_station.sh，不能关
+AI 终端 2：发送目标文本，用完可以继续留着
+AI 终端 3：rostopic echo /language_guided_perception/state，用来看状态
+```
+
+实验室电脑负责 `roscore`、相机和机械臂；你的电脑只负责推理和发目标检测结果。
+
 ### 1. 设置网络和工作空间
 
 先复制环境模板并按实际 IP 修改：

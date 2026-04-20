@@ -140,6 +140,106 @@ source devel/setup.bash
 
 Use this checklist on the machine that runs GroundingDINO inference. The Robot Station should already be hosting the ROS master, or `ROS_MASTER_URI` should point to the Robot Station.
 
+## Beginner Startup Order: Terminals on the AI Station
+
+If you are not familiar with ROS, follow this order exactly. Open a new terminal window or tab for each step. Do not stop a program that is still supposed to be running.
+
+Important: the AI Station does not start `roscore`. `roscore` should be started only once on the Robot Station.
+
+### AI Terminal 1: Connect to Robot Station ROS Master and Start Perception
+
+Open a terminal:
+
+```bash
+cd ~/sagittarius_ws
+source dual_machine/ai_station/env.local.sh
+bash dual_machine/ai_station/run_ai_station.sh
+```
+
+Keep this terminal open. It starts:
+
+- GroundingDINO inference
+- `/usb_cam/image_raw` subscription
+- `/grasp_target_text` text subscription
+- `/language_guided_grasp/target_observation` detection-result publisher
+- `/language_guided_perception/annotated_image` annotated-image publisher
+
+The AI perception node is ready when you see messages similar to:
+
+```text
+AI station perception node ready
+Loaded perception backend 'grounding_dino'
+```
+
+The first model load can take a while.
+
+### AI Terminal 2: Send Target Text
+
+Open a second terminal to publish the object you want to grasp:
+
+```bash
+cd ~/sagittarius_ws
+source dual_machine/ai_station/env.local.sh
+rostopic pub /grasp_target_text std_msgs/String "data: 'red block'" -1
+```
+
+To switch targets, publish a new text prompt:
+
+```bash
+rostopic pub /grasp_target_text std_msgs/String "data: 'banana'" -1
+rostopic pub /grasp_target_text std_msgs/String "data: 'bottle'" -1
+```
+
+### AI Terminal 3: Watch Perception State
+
+Open a third terminal:
+
+```bash
+cd ~/sagittarius_ws
+source dual_machine/ai_station/env.local.sh
+rostopic echo /language_guided_perception/state
+```
+
+To inspect the detection result sent to the Robot Station:
+
+```bash
+rostopic echo /language_guided_grasp/target_observation
+```
+
+To confirm that the AI Station receives camera images:
+
+```bash
+rostopic hz /usb_cam/image_raw
+```
+
+To confirm annotated debug images are being published:
+
+```bash
+rostopic hz /language_guided_perception/annotated_image
+```
+
+### AI Terminal 4: Optional Debug Terminal
+
+Use this only when debugging:
+
+```bash
+cd ~/sagittarius_ws
+source dual_machine/ai_station/env.local.sh
+rostopic list | grep -E 'grasp_target_text|target_observation|annotated_image|state|image_raw'
+```
+
+### AI Station Terminals During the Official Demo
+
+Keep at least these terminals open:
+
+```text
+AI Terminal 1: run_ai_station.sh, do not close
+AI Terminal 2: publish target text, can stay open for repeated commands
+AI Terminal 3: rostopic echo /language_guided_perception/state, for monitoring
+```
+
+The Robot Station owns `roscore`, camera, and robot execution. The AI Station only runs inference and publishes lightweight target observations.
+
 ### 1. Configure Network and Workspace
 
 Copy the environment template and edit the IP addresses:

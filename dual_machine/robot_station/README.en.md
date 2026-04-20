@@ -145,6 +145,105 @@ source devel/setup.bash
 
 Use this checklist on the lab machine that connects to the Sagittarius arm and USB camera. The Robot Station should normally host the ROS master.
 
+## Beginner Startup Order: Terminals on the Robot Station
+
+If you are not familiar with ROS, follow this order exactly. Open a new terminal window or tab for each step. Do not stop a program that is still supposed to be running.
+
+### Robot Terminal 1: Start ROS Master
+
+This terminal only runs `roscore`. Keep it open.
+
+```bash
+cd ~/sagittarius_ws
+source dual_machine/robot_station/env.local.sh
+roscore
+```
+
+The ROS master is ready when you see something like:
+
+```text
+started core service [/rosout]
+```
+
+Do not close this terminal. If you press `Ctrl-C` here, the other ROS nodes will disconnect.
+
+### Robot Terminal 2: Start Arm, Camera, and Executor
+
+Open a second terminal:
+
+```bash
+cd ~/sagittarius_ws
+source dual_machine/robot_station/env.local.sh
+bash dual_machine/robot_station/run_robot_station.sh
+```
+
+Keep this terminal open. It starts:
+
+- Sagittarius arm driver
+- MoveIt
+- `sgr_ctrl`
+- USB camera
+- `language_guided_executor.py`
+
+The robot side is basically ready when you see messages similar to:
+
+```text
+Ready to take commands
+Robot station executor ready
+```
+
+### Robot Terminal 3: Watch State
+
+Open a third terminal for monitoring:
+
+```bash
+cd ~/sagittarius_ws
+source dual_machine/robot_station/env.local.sh
+rostopic echo /language_guided_executor/state
+```
+
+To check the camera stream:
+
+```bash
+rostopic hz /usb_cam/image_raw
+```
+
+To check whether the AI Station is publishing detection results:
+
+```bash
+rostopic echo /language_guided_grasp/target_observation
+```
+
+### Robot Terminal 4: Optional Debug Terminal
+
+Use this only when debugging:
+
+```bash
+cd ~/sagittarius_ws
+source dual_machine/robot_station/env.local.sh
+rostopic list
+rosnode list
+```
+
+Useful checks:
+
+```bash
+rostopic list | grep -E 'image_raw|target_observation|execution_feedback|executor|sgr_ctrl'
+rosnode list | grep -E 'sdk_sagittarius_arm|move_group|sgr_ctrl|language_guided_executor|usb_cam'
+```
+
+### Robot Station Terminals During the Official Demo
+
+Keep at least these terminals open:
+
+```text
+Robot Terminal 1: roscore, do not close
+Robot Terminal 2: run_robot_station.sh, do not close
+Robot Terminal 3: rostopic echo /language_guided_executor/state, for monitoring
+```
+
+The AI Station runs GroundingDINO on your own computer, not on the lab machine.
+
 ### 1. Configure Network and Workspace
 
 Copy the environment template and edit the IP addresses:
