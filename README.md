@@ -232,6 +232,20 @@ rostopic echo /language_guided_grasp/state
 /tmp/language_guided_grasp_latest.jpg
 ```
 
+实机单机脚本默认还会保存两张调试图，方便确认“相机到底看到了什么”和“模型到底选中了哪里”：
+
+```text
+/tmp/language_guided_grasp_raw_single_gpu.jpg
+/tmp/language_guided_grasp_single_gpu.jpg
+```
+
+含义：
+
+- `language_guided_grasp_raw_single_gpu.jpg`：原始相机画面，不带任何检测框
+- `language_guided_grasp_single_gpu.jpg`：带 GroundingDINO 检测框、分数、选中中心点的标注图
+
+如果出现“模型能抓但落点偏很多”，优先检查这两张图和 ROS 日志里的 `Stable target ... pixel center`、`Target ... mapped to arm plane`。如果图里目标框是对的，但映射出的 `x/y` 明显不随像素变化，问题通常在 `vision_config.yaml` 标定，而不是模型检测。
+
 ## 环境准备
 
 当前调试机器上 GroundingDINO 实际使用路径：
@@ -368,7 +382,11 @@ pixel_format:=mjpeg \
 image_width:=640 \
 image_height:=480 \
 framerate:=10 \
-search_pose_mode:=define_stay \
+search_pose_mode:=camera_down \
+search_pose_x:=0.20 \
+search_pose_y:=0.00 \
+search_pose_z:=0.15 \
+search_pose_pitch:=1.57 \
 return_to_search_pose_after_grasp:=false \
 pick_orientation_mode:=auto \
 drop_after_grasp:=false
@@ -391,12 +409,14 @@ src/sagittarius_arm_ros/sagittarius_perception/sagittarius_object_color_detector
 
 ### 位姿与抓取姿态参数
 
-为了避免机械臂在启动或抓取结束后突然移动到硬编码姿态，当前默认行为改为“保持当前位置”：
+为了避免机械臂在启动或抓取结束后突然移动到错误的硬编码姿态，当前默认行为保持兼容，但实机脚本默认使用 `camera_down` 桌面观察姿态：
 
-- `search_pose_mode:=none`：默认值，启动时不强制移动到固定搜索位姿
+- `search_pose_mode:=none`：launch 默认值，启动时不强制移动到固定搜索位姿
 - `search_pose_mode:=stay` / `hold_current`：兼容写法，同样表示保持当前位置
-- `search_pose_mode:=define_stay`：显式启用旧的 `ACTION_TYPE_DEFINE_STAY` 预设姿态
-- `search_pose_mode:=xyz_rpy` / `legacy`：显式启用旧的固定 XYZ+RPY 搜索位姿
+- `search_pose_mode:=camera_down` / `table_view`：推荐实机模式，进入可配置 XYZ+RPY 桌面观察姿态，让相机朝向桌面
+- `search_pose_mode:=define_stay`：显式启用旧的 `ACTION_TYPE_DEFINE_STAY` 预设姿态；这个姿态可能让机械臂向上折叠、相机朝天，通常不推荐
+- `search_pose_mode:=xyz_rpy` / `legacy`：兼容旧的固定 XYZ+RPY 搜索位姿，当前等价于可配置桌面观察姿态
+- `search_pose_x/y/z/roll/pitch/yaw`：桌面观察姿态参数，默认 `x=0.20, y=0.00, z=0.15, roll=0.0, pitch=1.57, yaw=0.0`
 - `return_to_search_pose_after_grasp:=false`：默认值，抓取结束后不再强制回到搜索位姿
 - `return_to_search_pose_after_grasp:=true`：抓取结束后按 `search_pose_mode` 执行回位
 - `pick_orientation_mode:=auto`：默认值，抓取时优先使用 `ACTION_TYPE_PICK_XYZ`，由 `sgr_ctrl` 根据目标点动态计算末端姿态
@@ -405,15 +425,45 @@ src/sagittarius_arm_ros/sagittarius_perception/sagittarius_object_color_detector
 如果摄像头视野需要机械臂先抬到准备姿态，实机抓取时使用：
 
 ```bash
-search_pose_mode:=define_stay \
+search_pose_mode:=camera_down \
+search_pose_x:=0.20 \
+search_pose_y:=0.00 \
+search_pose_z:=0.15 \
+search_pose_pitch:=1.57 \
 return_to_search_pose_after_grasp:=false \
 pick_orientation_mode:=auto \
 drop_after_grasp:=false
 ```
 
-这样只在启动阶段进入观察/准备姿态，抓取结束后不会再次强制回到硬编码姿态。
+这样只在启动阶段进入相机朝向桌面的观察/准备姿态，抓取结束后不会再次强制回到硬编码姿态。如果现场观察发现相机还不够朝下，优先小幅调整 `search_pose_z` 或 `search_pose_pitch`，不要再使用 `define_stay`。
 
 ### 手动标定 vision_config.yaml
+
+当前语言抓取仍然沿用原开源包的线性映射约定：
+
+```text
+robot_x = k1 * pixel_y + b1
+robot_y = k2 * pixel_x + b2
+```
+
+如果 `config/vision_config.yaml` 里 `k1=0.0` 且 `k2=0.0`，说明还没有有效标定。此时模型即使正确识别了目标，不同像素位置也都会映射到同一个机械臂平面点，抓取会明显偏。
+
+原始开源包也提供了 HSV 蓝色块标定流程：
+
+```bash
+roslaunch sagittarius_object_color_detector camera_calibration_hsv.launch
+bash src/sagittarius_arm_ros/sagittarius_perception/sagittarius_object_color_detector/scripts/send_topic.sh
+```
+
+这个流程会调用：
+
+```text
+nodes/calibration.py
+nodes/calibration_pose.py
+scripts/send_topic.sh
+```
+
+但它依赖 HSV 蓝色方块识别，和当前 GroundingDINO 语言抓取链路不是完全同一套感知逻辑。当前项目更推荐下面的手动 CSV 标定：用语言抓取节点保存标注图，人工记录每个目标中心像素和对应机械臂平面坐标，再拟合 `vision_config.yaml`。
 
 手动标定需要准备一个 CSV 文件，记录几组点：
 
@@ -442,6 +492,49 @@ cp src/sagittarius_arm_ros/sagittarius_perception/sagittarius_object_color_detec
 
 把 `manual_calibration_points.csv` 里的示例数值换成你自己测到的点，建议至少 5 个点：中心、左上、右上、左下、右下。
 
+推荐采集方式：
+
+1. 运行单机脚本，但先关闭真实抓取，只保存原图和标注图。
+2. 在桌面上放置红色方块，发送 `red block`。
+3. 读取日志里的像素中心，或打开标注图查看中心点。
+4. 把这个方块在桌面上对应的机械臂平面坐标记为 `robot_x,robot_y`。
+5. 移动方块到下一个位置，重复采集至少 5 个点。
+
+采集命令示例：
+
+```bash
+cd ~/sagittarius_ws
+EXECUTE_GRASP=false \
+DEVICE=cuda \
+SAVE_RAW_IMAGE=true \
+RAW_IMAGE_PATH=/tmp/language_guided_grasp_raw_calib.jpg \
+SAVE_ANNOTATED_IMAGE=true \
+ANNOTATED_IMAGE_PATH=/tmp/language_guided_grasp_annotated_calib.jpg \
+bash src/sagittarius_arm_ros/sagittarius_perception/sagittarius_object_color_detector/scripts/run_single_machine_gpu_grasp.sh
+```
+
+新开一个终端发送目标：
+
+```bash
+cd ~/sagittarius_ws
+source /opt/ros/noetic/setup.bash
+source devel/setup.bash
+rostopic pub /grasp_target_text std_msgs/String "data: 'red block'" -1
+```
+
+查看保存结果：
+
+```bash
+ls -l /tmp/language_guided_grasp_raw_calib.jpg /tmp/language_guided_grasp_annotated_calib.jpg
+```
+
+如果需要从 Windows 打开图片，可以复制到桌面：
+
+```bash
+cp /tmp/language_guided_grasp_raw_calib.jpg /mnt/c/Users/HankL/Desktop/
+cp /tmp/language_guided_grasp_annotated_calib.jpg /mnt/c/Users/HankL/Desktop/
+```
+
 先只试算，不写入配置：
 
 ```bash
@@ -465,6 +558,12 @@ bash src/sagittarius_arm_ros/sagittarius_perception/sagittarius_object_color_det
 vision_config.yaml.bak_YYYYMMDD_HHMMSS
 ```
 
+写回后重新启动语言抓取节点，并确认启动日志不再出现：
+
+```text
+vision_config mapping is degenerate
+```
+
 ### 真实相机闭环
 
 ```bash
@@ -477,10 +576,18 @@ roslaunch sagittarius_object_color_detector language_guided_grasp.launch \
   framerate:=10 \
   min_grasp_score:=0.35 \
   publish_annotated_image:=true \
+  save_raw_image:=true \
+  raw_image_path:=/tmp/language_guided_grasp_raw_live.jpg \
+  save_annotated_image:=true \
+  annotated_image_path:=/tmp/language_guided_grasp_annotated_live.jpg \
   state_topic:=/language_guided_grasp/state \
   groundingdino_config:=/mnt/d/ai_models/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py \
   groundingdino_weights:=/mnt/d/ai_models/GroundingDINO/weights/groundingdino_swint_ogc.pth \
-  search_pose_mode:=define_stay \
+  search_pose_mode:=camera_down \
+  search_pose_x:=0.20 \
+  search_pose_y:=0.00 \
+  search_pose_z:=0.15 \
+  search_pose_pitch:=1.57 \
   return_to_search_pose_after_grasp:=false \
   pick_orientation_mode:=auto \
   drop_after_grasp:=false \
@@ -496,6 +603,8 @@ roslaunch sagittarius_object_color_detector language_guided_grasp_image_test.lau
   min_grasp_score:=0.35 \
   save_annotated_image:=true \
   annotated_image_path:=/tmp/language_guided_grasp_latest.jpg \
+  save_raw_image:=true \
+  raw_image_path:=/tmp/language_guided_grasp_raw_test.jpg \
   state_topic:=/language_guided_grasp/state \
   groundingdino_config:=/mnt/d/ai_models/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py \
   groundingdino_weights:=/mnt/d/ai_models/GroundingDINO/weights/groundingdino_swint_ogc.pth \
@@ -521,6 +630,8 @@ roslaunch sagittarius_object_color_detector language_guided_grasp_image_test.lau
   execute_grasp:=false \
   save_annotated_image:=true \
   annotated_image_path:=/tmp/language_guided_grasp_latest.jpg \
+  save_raw_image:=true \
+  raw_image_path:=/tmp/language_guided_grasp_raw_test.jpg \
   state_topic:=/language_guided_grasp/state \
   groundingdino_config:=/mnt/d/ai_models/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py \
   groundingdino_weights:=/mnt/d/ai_models/GroundingDINO/weights/groundingdino_swint_ogc.pth \

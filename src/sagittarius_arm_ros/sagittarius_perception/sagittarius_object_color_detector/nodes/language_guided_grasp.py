@@ -67,6 +67,14 @@ class LanguageGuidedGraspNode:
         self.drop_after_grasp = self._get_bool_param("~drop_after_grasp", True)
         self.execute_grasp = self._get_bool_param("~execute_grasp", True)
         self.search_pose_mode = rospy.get_param("~search_pose_mode", "none")
+        self.search_pose = {
+            "x": float(rospy.get_param("~search_pose_x", 0.20)),
+            "y": float(rospy.get_param("~search_pose_y", 0.00)),
+            "z": float(rospy.get_param("~search_pose_z", 0.15)),
+            "roll": float(rospy.get_param("~search_pose_roll", 0.0)),
+            "pitch": float(rospy.get_param("~search_pose_pitch", 1.57)),
+            "yaw": float(rospy.get_param("~search_pose_yaw", 0.0)),
+        }
         self.return_to_search_pose_after_grasp = self._get_bool_param(
             "~return_to_search_pose_after_grasp", False
         )
@@ -99,6 +107,10 @@ class LanguageGuidedGraspNode:
         )
         self.annotated_image_path = rospy.get_param(
             "~annotated_image_path", "/tmp/language_guided_grasp_latest.jpg"
+        )
+        self.save_raw_image = self._get_bool_param("~save_raw_image", False)
+        self.raw_image_path = rospy.get_param(
+            "~raw_image_path", "/tmp/language_guided_grasp_raw.jpg"
         )
         self.model_config = rospy.get_param(
             "~groundingdino_config",
@@ -149,6 +161,7 @@ class LanguageGuidedGraspNode:
                 arm_name=self.arm_name,
                 pick_z=self.pick_z,
                 drop_position=self.drop_position,
+                search_pose=self.search_pose,
             )
             self.executor.move_to_search_pose(self.search_pose_mode)
         else:
@@ -204,6 +217,13 @@ class LanguageGuidedGraspNode:
             self.execute_grasp,
             self.annotated_image_topic if self.publish_annotated_image else "disabled",
         )
+        if self.save_raw_image:
+            rospy.loginfo("Raw camera snapshots will be saved to: %s", self.raw_image_path)
+        if self.save_annotated_image:
+            rospy.loginfo(
+                "Annotated detection snapshots will be saved to: %s",
+                self.annotated_image_path,
+            )
         rospy.loginfo("Pipeline state topic: %s", self.state_topic)
         if not self.backend_ready:
             rospy.logwarn(
@@ -344,8 +364,20 @@ class LanguageGuidedGraspNode:
             worker.start()
 
     def _publish_detection_observation(self, cv_image, result, target_text, decision, source_msg):
-        if not self.publish_annotated_image and not self.save_annotated_image:
+        if (
+            not self.publish_annotated_image
+            and not self.save_annotated_image
+            and not self.save_raw_image
+        ):
             return
+
+        if self.save_raw_image:
+            if not cv2.imwrite(self.raw_image_path, cv_image):
+                rospy.logwarn_throttle(
+                    5.0,
+                    "Failed to save raw camera image to %s",
+                    self.raw_image_path,
+                )
 
         annotated = draw_detection_overlay(cv_image, result, target_text, decision)
         if self.annotated_image_pub is not None:

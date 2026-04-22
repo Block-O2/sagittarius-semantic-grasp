@@ -14,9 +14,17 @@ from sagittarius_object_color_detector.msg import (
 class SagittariusGraspExecutor:
     """Thin wrapper around the existing sgr_ctrl action pipeline."""
 
-    def __init__(self, arm_name: str, pick_z: float, drop_position):
+    def __init__(self, arm_name: str, pick_z: float, drop_position, search_pose=None):
         self.pick_z = float(pick_z)
         self.drop_position = drop_position
+        self.search_pose = search_pose or {
+            "x": 0.20,
+            "y": 0.00,
+            "z": 0.15,
+            "roll": 0.0,
+            "pitch": 1.57,
+            "yaw": 0.0,
+        }
         action_name = "{}/sgr_ctrl".format(arm_name)
         self.client = actionlib.SimpleActionClient(action_name, SGRCtrlAction)
         rospy.loginfo("Waiting for action server: %s", action_name)
@@ -38,14 +46,28 @@ class SagittariusGraspExecutor:
         goal = SGRCtrlGoal()
         goal.grasp_type = goal.GRASP_NONE
         if mode in ("define_stay", "preset_stay"):
+            rospy.logwarn(
+                "search_pose_mode=%s uses legacy joint preset and may point the camera away from the table; prefer camera_down",
+                mode,
+            )
             goal.action_type = goal.ACTION_TYPE_DEFINE_STAY
-        elif mode in ("xyz_rpy", "search", "legacy"):
+        elif mode in ("camera_down", "table_view", "down", "xyz_rpy", "search", "legacy"):
             goal.action_type = goal.ACTION_TYPE_XYZ_RPY
-            goal.pos_x = 0.2
-            goal.pos_y = 0.0
-            goal.pos_z = 0.15
-            goal.pos_pitch = 1.57
-            goal.pos_yaw = 0.0
+            goal.pos_x = float(self.search_pose["x"])
+            goal.pos_y = float(self.search_pose["y"])
+            goal.pos_z = float(self.search_pose["z"])
+            goal.pos_roll = float(self.search_pose["roll"])
+            goal.pos_pitch = float(self.search_pose["pitch"])
+            goal.pos_yaw = float(self.search_pose["yaw"])
+            rospy.loginfo(
+                "Moving to camera/table search pose xyz=(%.3f, %.3f, %.3f), rpy=(%.3f, %.3f, %.3f)",
+                goal.pos_x,
+                goal.pos_y,
+                goal.pos_z,
+                goal.pos_roll,
+                goal.pos_pitch,
+                goal.pos_yaw,
+            )
         else:
             rospy.logwarn(
                 "Unknown search_pose_mode=%s, keeping current pose instead of using a hard-coded preset",

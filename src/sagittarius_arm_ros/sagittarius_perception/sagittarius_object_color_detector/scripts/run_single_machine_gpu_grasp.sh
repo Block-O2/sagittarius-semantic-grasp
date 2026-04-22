@@ -19,10 +19,23 @@ FRAMERATE="${FRAMERATE:-10}"
 DEVICE="${DEVICE:-cuda}"
 EXECUTE_GRASP="${EXECUTE_GRASP:-false}"
 TARGET_TEXT="${TARGET_TEXT:-}"
-SEARCH_POSE_MODE="${SEARCH_POSE_MODE:-define_stay}"
+# Use the old color-grasp XYZ/RPY search pose by default so the arm camera
+# looks toward the table. Avoid the legacy DEFINE_STAY joint preset because it
+# can fold the arm upward and point the camera at the ceiling.
+SEARCH_POSE_MODE="${SEARCH_POSE_MODE:-camera_down}"
+SEARCH_POSE_X="${SEARCH_POSE_X:-0.20}"
+SEARCH_POSE_Y="${SEARCH_POSE_Y:-0.00}"
+SEARCH_POSE_Z="${SEARCH_POSE_Z:-0.15}"
+SEARCH_POSE_ROLL="${SEARCH_POSE_ROLL:-0.0}"
+SEARCH_POSE_PITCH="${SEARCH_POSE_PITCH:-1.57}"
+SEARCH_POSE_YAW="${SEARCH_POSE_YAW:-0.0}"
 RETURN_TO_SEARCH_POSE_AFTER_GRASP="${RETURN_TO_SEARCH_POSE_AFTER_GRASP:-false}"
 PICK_ORIENTATION_MODE="${PICK_ORIENTATION_MODE:-auto}"
 DROP_AFTER_GRASP="${DROP_AFTER_GRASP:-false}"
+SAVE_RAW_IMAGE="${SAVE_RAW_IMAGE:-true}"
+RAW_IMAGE_PATH="${RAW_IMAGE_PATH:-/tmp/language_guided_grasp_raw_single_gpu.jpg}"
+SAVE_ANNOTATED_IMAGE="${SAVE_ANNOTATED_IMAGE:-true}"
+ANNOTATED_IMAGE_PATH="${ANNOTATED_IMAGE_PATH:-/tmp/language_guided_grasp_single_gpu.jpg}"
 
 cd "$WS_DIR"
 source "$GROUNDINGDINO_VENV/bin/activate"
@@ -46,11 +59,19 @@ roslaunch sagittarius_object_color_detector language_guided_grasp.launch \
   min_grasp_score:=0.35 \
   execute_grasp:="$EXECUTE_GRASP" \
   search_pose_mode:="$SEARCH_POSE_MODE" \
+  search_pose_x:="$SEARCH_POSE_X" \
+  search_pose_y:="$SEARCH_POSE_Y" \
+  search_pose_z:="$SEARCH_POSE_Z" \
+  search_pose_roll:="$SEARCH_POSE_ROLL" \
+  search_pose_pitch:="$SEARCH_POSE_PITCH" \
+  search_pose_yaw:="$SEARCH_POSE_YAW" \
   return_to_search_pose_after_grasp:="$RETURN_TO_SEARCH_POSE_AFTER_GRASP" \
   pick_orientation_mode:="$PICK_ORIENTATION_MODE" \
   drop_after_grasp:="$DROP_AFTER_GRASP" \
-  save_annotated_image:=true \
-  annotated_image_path:=/tmp/language_guided_grasp_single_gpu.jpg \
+  save_raw_image:="$SAVE_RAW_IMAGE" \
+  raw_image_path:="$RAW_IMAGE_PATH" \
+  save_annotated_image:="$SAVE_ANNOTATED_IMAGE" \
+  annotated_image_path:="$ANNOTATED_IMAGE_PATH" \
   groundingdino_config:="$GROUNDINGDINO_CONFIG" \
   groundingdino_weights:="$GROUNDINGDINO_WEIGHTS" \
   default_target_text:="$TARGET_TEXT"
