@@ -76,11 +76,13 @@ src/sagittarius_arm_ros/sagittarius_perception/sagittarius_object_color_detector
 ├── launch/
 │   ├── language_guided_grasp.launch
 │   ├── language_guided_grasp_image_test.launch
+│   ├── language_guided_calibration_base.launch
 │   ├── color_classification.launch
 │   ├── color_classification_image_test.launch
 │   └── usb_cam.launch
 ├── nodes/
 │   ├── language_guided_grasp.py
+│   ├── language_guided_calibration.py
 │   ├── color_classification.py
 │   ├── perception_backend_smoke_test.py
 │   ├── publish_test_image.py
@@ -121,6 +123,7 @@ src/sagittarius_arm_ros/sagittarius_perception/sagittarius_object_color_detector
 - `perception_framework/coordinate_mapping.py`：读取 `vision_config.yaml`，把像素中心映射到机械臂平面坐标
 - `perception_framework/execution.py`：对原有 `SGRCtrlAction` 的轻量封装
 - `publish_test_image.py`：把本地图片发布成 `/usb_cam/image_raw`，用于不接真实相机时验证链路
+- `language_guided_calibration.py`：复用原始标定思路，让机械臂移动到已知点，用户放方块，GroundingDINO 记录像素中心并写回 `vision_config.yaml`
 - `perception_backend_smoke_test.py`：不启动 ROS action，只验证感知后端推理输出
 - `scripts/ensure_sagittarius_serial.sh`：检查/修复 WSL 下机械臂串口 `/dev/ttyACM0` 和兼容链接 `/dev/sagittarius`
 - `nodes/manual_vision_calibration.py`：根据手动采集的像素点和机械臂平面坐标拟合 `vision_config.yaml`
@@ -464,6 +467,92 @@ scripts/send_topic.sh
 ```
 
 但它依赖 HSV 蓝色方块识别，和当前 GroundingDINO 语言抓取链路不是完全同一套感知逻辑。当前项目更推荐下面的手动 CSV 标定：用语言抓取节点保存标注图，人工记录每个目标中心像素和对应机械臂平面坐标，再拟合 `vision_config.yaml`。
+
+如果你不想手动猜 `robot_x,robot_y`，推荐使用新的语言辅助标定脚本。它复刻原包思路：机械臂先移动到 5 个已知坐标，你把红色方块放到夹爪正下方，这样方块真实坐标就等于机械臂当前已知坐标；然后机械臂移到观察姿态，GroundingDINO 识别方块中心并自动配对。
+
+终端 1：启动机械臂、MoveIt、`sgr_ctrl` 和相机，不启动抓取节点：
+
+```bash
+cd ~/sagittarius_ws
+source /mnt/d/ai_models/groundingdino-venv/bin/activate
+source /opt/ros/noetic/setup.bash
+source devel/setup.bash
+export PYTHONPATH=/mnt/d/ai_models/GroundingDINO:$PYTHONPATH
+export MPLCONFIGDIR=/tmp/matplotlib-cfg
+mkdir -p "$MPLCONFIGDIR"
+
+roslaunch sagittarius_object_color_detector language_guided_calibration_base.launch \
+  video_dev:=/dev/video0 \
+  pixel_format:=mjpeg \
+  image_width:=640 \
+  image_height:=480 \
+  framerate:=10
+```
+
+这个 launch 只启动基础服务和相机，不会主动执行标定点移动。标定移动会在终端 2 的交互脚本里按步骤触发。
+
+终端 2：运行交互式语言标定脚本：
+
+```bash
+cd ~/sagittarius_ws
+source /mnt/d/ai_models/groundingdino-venv/bin/activate
+source /opt/ros/noetic/setup.bash
+source devel/setup.bash
+export PYTHONPATH=/mnt/d/ai_models/GroundingDINO:$PYTHONPATH
+export MPLCONFIGDIR=/tmp/matplotlib-cfg
+mkdir -p "$MPLCONFIGDIR"
+
+rosrun sagittarius_object_color_detector language_guided_calibration.py \
+  _target_text:="red block" \
+  _device:=cuda \
+  _image_topic:=/usb_cam/image_raw \
+  _groundingdino_config:=/mnt/d/ai_models/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py \
+  _groundingdino_weights:=/mnt/d/ai_models/GroundingDINO/weights/groundingdino_swint_ogc.pth \
+  _vision_config:=$HOME/sagittarius_ws/src/sagittarius_arm_ros/sagittarius_perception/sagittarius_object_color_detector/config/vision_config.yaml \
+  _output_csv:=$HOME/sagittarius_ws/src/sagittarius_arm_ros/sagittarius_perception/sagittarius_object_color_detector/config/manual_calibration_points.csv \
+  _image_dir:=/tmp/language_guided_calibration \
+  _place_z:=0.12 \
+  _place_z_fallbacks:=0.12,0.15,0.18 \
+  _update_vision_config:=true
+```
+
+运行后按终端提示操作：
+
+1. 机械臂移动到第 1 个已知点。
+2. 把红色方块放到夹爪正下方。
+3. 按回车。
+4. 机械臂移到观察姿态，相机拍照，GroundingDINO 记录像素中心。
+5. 重复到第 5 个点。
+
+脚本会自动生成：
+
+```text
+src/sagittarius_arm_ros/sagittarius_perception/sagittarius_object_color_detector/config/manual_calibration_points.csv
+/tmp/language_guided_calibration/point_01_raw.jpg
+/tmp/language_guided_calibration/point_01_annotated.jpg
+...
+```
+
+并写回：
+
+```text
+src/sagittarius_arm_ros/sagittarius_perception/sagittarius_object_color_detector/config/vision_config.yaml
+```
+
+如果想先只采集和试算，不写回配置，把 `_update_vision_config:=true` 改成：
+
+```bash
+_update_vision_config:=false
+```
+
+如果第一个标定点仍然出现 MoveIt 自碰撞或 `result=3`，说明当前机械臂起始状态不适合直接去低位参考点。先不要硬抓，可以把标定参考高度调高：
+
+```bash
+_place_z:=0.15 \
+_place_z_fallbacks:=0.15,0.18,0.22
+```
+
+标定只需要 `x/y` 已知，不要求夹爪真的贴近桌面。把红块放在夹爪垂直投影下方即可。
 
 手动标定需要准备一个 CSV 文件，记录几组点：
 

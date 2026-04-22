@@ -36,6 +36,8 @@ SAVE_RAW_IMAGE="${SAVE_RAW_IMAGE:-true}"
 RAW_IMAGE_PATH="${RAW_IMAGE_PATH:-/tmp/language_guided_grasp_raw_single_gpu.jpg}"
 SAVE_ANNOTATED_IMAGE="${SAVE_ANNOTATED_IMAGE:-true}"
 ANNOTATED_IMAGE_PATH="${ANNOTATED_IMAGE_PATH:-/tmp/language_guided_grasp_single_gpu.jpg}"
+HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}"
+TRANSFORMERS_OFFLINE="${TRANSFORMERS_OFFLINE:-1}"
 
 cd "$WS_DIR"
 source "$GROUNDINGDINO_VENV/bin/activate"
@@ -44,6 +46,8 @@ source "$WS_DIR/devel/setup.bash"
 
 export PYTHONPATH="$GROUNDINGDINO_ROOT:${PYTHONPATH:-}"
 export MPLCONFIGDIR="${MPLCONFIGDIR:-/tmp/matplotlib-cfg}"
+export HF_HUB_OFFLINE
+export TRANSFORMERS_OFFLINE
 mkdir -p "$MPLCONFIGDIR"
 
 roslaunch sagittarius_object_color_detector language_guided_grasp.launch \

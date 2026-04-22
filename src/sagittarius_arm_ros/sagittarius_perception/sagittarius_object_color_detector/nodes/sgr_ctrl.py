@@ -181,7 +181,8 @@ class CencelException(Exception):
 
 class SGRCtrlActionServer:
     def __init__(self) -> None:
-        self.sgr_tool = MoveItSGRTool()
+        init_pose = rospy.get_param("~init_pose", True)
+        self.sgr_tool = MoveItSGRTool(init_pose=init_pose)
         rospy.wait_for_service('get_servo_info', 3)
         self.servo_info_srv = rospy.ServiceProxy('get_servo_info', ServoRtInfo)
         self._server = actionlib.SimpleActionServer(
