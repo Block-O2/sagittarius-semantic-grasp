@@ -20,7 +20,7 @@ FRAMERATE="${FRAMERATE:-10}"
 DEVICE="${DEVICE:-cuda}"
 EXECUTE_GRASP="${EXECUTE_GRASP:-false}"
 TARGET_TEXT="${TARGET_TEXT:-}"
-VISION_CONFIG="${VISION_CONFIG:-}"
+VISION_CONFIG="${VISION_CONFIG:-$PACKAGE_DIR/config/vision_config_pick_front.yaml}"
 # Use the old color-grasp XYZ/RPY search pose by default so the arm camera
 # looks toward the table. Avoid the legacy DEFINE_STAY joint preset because it
 # can fold the arm upward and point the camera at the ceiling.
@@ -35,14 +35,14 @@ RETURN_TO_SEARCH_POSE_AFTER_GRASP="${RETURN_TO_SEARCH_POSE_AFTER_GRASP:-false}"
 PICK_ORIENTATION_MODE="${PICK_ORIENTATION_MODE:-auto}"
 DROP_AFTER_GRASP="${DROP_AFTER_GRASP:-false}"
 PLACE_FRONT_VIEW_ENABLED="${PLACE_FRONT_VIEW_ENABLED:-true}"
-PLACE_FRONT_VIEW_VISION_CONFIG="${PLACE_FRONT_VIEW_VISION_CONFIG:-}"
+PLACE_FRONT_VIEW_VISION_CONFIG="${PLACE_FRONT_VIEW_VISION_CONFIG:-$PACKAGE_DIR/config/vision_config_place_front.yaml}"
 PLACE_FRONT_VIEW_X="${PLACE_FRONT_VIEW_X:-0.20}"
 PLACE_FRONT_VIEW_Y="${PLACE_FRONT_VIEW_Y:-0.00}"
 PLACE_FRONT_VIEW_Z="${PLACE_FRONT_VIEW_Z:-0.20}"
 PLACE_FRONT_VIEW_ROLL="${PLACE_FRONT_VIEW_ROLL:-0.0}"
 PLACE_FRONT_VIEW_PITCH="${PLACE_FRONT_VIEW_PITCH:-1.57}"
 PLACE_FRONT_VIEW_YAW="${PLACE_FRONT_VIEW_YAW:-0.0}"
-PLACE_SCAN_VIEW_ORDER="${PLACE_SCAN_VIEW_ORDER:-front,left,right}"
+PLACE_SCAN_VIEW_ORDER="${PLACE_SCAN_VIEW_ORDER:-front}"
 SCAN_ATTEMPTS_PER_VIEW="${SCAN_ATTEMPTS_PER_VIEW:-5}"
 SCAN_STABLE_REQUIRED="${SCAN_STABLE_REQUIRED:-3}"
 SCAN_SETTLE_SEC="${SCAN_SETTLE_SEC:-0.8}"
@@ -91,7 +91,7 @@ roslaunch sagittarius_object_color_detector language_guided_grasp.launch \
   stable_required:=3 \
   center_tolerance:=12.0 \
   min_grasp_score:=0.35 \
-vision_config:="${VISION_CONFIG:-$PACKAGE_DIR/config/vision_config_front.yaml}" \
+  vision_config:="$VISION_CONFIG" \
   execute_grasp:="$EXECUTE_GRASP" \
   search_pose_mode:="$SEARCH_POSE_MODE" \
   search_pose_x:="$SEARCH_POSE_X" \
@@ -105,7 +105,7 @@ vision_config:="${VISION_CONFIG:-$PACKAGE_DIR/config/vision_config_front.yaml}" 
   drop_after_grasp:="$DROP_AFTER_GRASP" \
   dynamic_place_z:="${DYNAMIC_PLACE_Z:-0.20}" \
   place_front_view_enabled:="$PLACE_FRONT_VIEW_ENABLED" \
-  place_front_view_vision_config:="${PLACE_FRONT_VIEW_VISION_CONFIG:-${VISION_CONFIG:-$PACKAGE_DIR/config/vision_config_front.yaml}}" \
+  place_front_view_vision_config:="$PLACE_FRONT_VIEW_VISION_CONFIG" \
   place_front_view_x:="$PLACE_FRONT_VIEW_X" \
   place_front_view_y:="$PLACE_FRONT_VIEW_Y" \
   place_front_view_z:="$PLACE_FRONT_VIEW_Z" \
