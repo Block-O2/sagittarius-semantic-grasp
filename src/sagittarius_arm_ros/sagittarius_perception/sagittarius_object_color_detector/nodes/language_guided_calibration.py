@@ -92,6 +92,32 @@ class LanguageGuidedCalibration:
         self.observe_roll = float(rospy.get_param("~observe_roll", 0.0))
         self.observe_pitch = float(rospy.get_param("~observe_pitch", 1.57))
         self.observe_yaw = float(rospy.get_param("~observe_yaw", 0.0))
+        self.move_observation_via_intermediate = self._get_bool_param(
+            "~move_observation_via_intermediate",
+            True,
+        )
+        self.allow_direct_observation_fallback = self._get_bool_param(
+            "~allow_direct_observation_fallback",
+            True,
+        )
+        self.intermediate_x = float(
+            rospy.get_param("~intermediate_x", self.observe_x)
+        )
+        self.intermediate_y = float(
+            rospy.get_param("~intermediate_y", 0.0)
+        )
+        self.intermediate_z = float(
+            rospy.get_param("~intermediate_z", max(self.observe_z, 0.23))
+        )
+        self.intermediate_roll = float(
+            rospy.get_param("~intermediate_roll", self.observe_roll)
+        )
+        self.intermediate_pitch = float(
+            rospy.get_param("~intermediate_pitch", self.observe_pitch)
+        )
+        self.intermediate_yaw = float(
+            rospy.get_param("~intermediate_yaw", 0.0)
+        )
 
         self.points = self._parse_points(rospy.get_param("~calibration_points", ""))
 
@@ -151,14 +177,7 @@ class LanguageGuidedCalibration:
             self._prompt("请把方块放到夹爪正下方，放好后按回车继续...")
 
             rospy.loginfo("Moving to observation pose for image capture")
-            self._move_xyz_rpy(
-                self.observe_x,
-                self.observe_y,
-                self.observe_z,
-                self.observe_roll,
-                self.observe_pitch,
-                self.observe_yaw,
-            )
+            self._move_to_observation_pose()
             rospy.sleep(self.observation_settle_sec)
 
             detection = self._detect_current_point(index)
@@ -339,6 +358,56 @@ class LanguageGuidedCalibration:
             "所有放置参考高度都规划失败。请先用 demo_true/RViz 把机械臂移动到正常无遮挡姿态，"
             "或重新运行时增加 _place_z_fallbacks:=0.15,0.18,0.22。失败详情: {}".format(
                 "; ".join(errors)
+            )
+        )
+
+    def _move_to_observation_pose(self):
+        direct_error = None
+        if self.move_observation_via_intermediate:
+            rospy.loginfo(
+                "Moving through intermediate pose before observation xyz=(%.3f, %.3f, %.3f), rpy=(%.3f, %.3f, %.3f)",
+                self.intermediate_x,
+                self.intermediate_y,
+                self.intermediate_z,
+                self.intermediate_roll,
+                self.intermediate_pitch,
+                self.intermediate_yaw,
+            )
+            try:
+                self._move_xyz_rpy(
+                    self.intermediate_x,
+                    self.intermediate_y,
+                    self.intermediate_z,
+                    self.intermediate_roll,
+                    self.intermediate_pitch,
+                    self.intermediate_yaw,
+                )
+            except RuntimeError as exc:
+                if not self.allow_direct_observation_fallback:
+                    raise RuntimeError(
+                        "机械臂无法到达中间安全观察位: {}".format(exc)
+                    )
+                rospy.logwarn(
+                    "Intermediate pose failed, trying direct observation pose because allow_direct_observation_fallback=true: %s",
+                    exc,
+                )
+
+        try:
+            self._move_xyz_rpy(
+                self.observe_x,
+                self.observe_y,
+                self.observe_z,
+                self.observe_roll,
+                self.observe_pitch,
+                self.observe_yaw,
+            )
+            return
+        except RuntimeError as exc:
+            direct_error = exc
+
+        raise RuntimeError(
+            "机械臂无法到达观察位。可尝试调大 intermediate_z 或调整 intermediate_yaw。失败详情: {}".format(
+                direct_error
             )
         )
 
