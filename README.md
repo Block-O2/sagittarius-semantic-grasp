@@ -276,6 +276,7 @@ front,left,right
 
 - `front` 默认复用原来的 `search_pose_*` 和 `vision_config.yaml`
 - `left/right` 必须显式提供各自的 `vision_config`
+- 默认推荐把 `left_view_yaw` 设为正值、`right_view_yaw` 设为负值，让相机真正朝左/朝右转，而不是只做平移
 - `dynamic_place_z` 是“把物体放到桶上方并松手”的绝对 Z，高度应根据桶口高度手动设定
 
 ### 多观察位标定建议
@@ -596,6 +597,20 @@ rosrun sagittarius_object_color_detector language_guided_calibration.py \
   _place_z_fallbacks:=0.12,0.15,0.18 \
   _update_vision_config:=true
 ```
+
+如果你在做 `left/right` 多观察位标定，不要只改 `observe_y`，还要同步给 `observe_yaw` 一个明显的偏航角。例如：
+
+```bash
+# left
+_observe_x:=0.20 _observe_y:=0.08 _observe_z:=0.15 \
+_observe_roll:=0.0 _observe_pitch:=1.57 _observe_yaw:=0.45
+
+# right
+_observe_x:=0.20 _observe_y:=-0.08 _observe_z:=0.15 \
+_observe_roll:=0.0 _observe_pitch:=1.57 _observe_yaw:=-0.45
+```
+
+否则机械臂只是“平移到左边/右边”，相机朝向并没有真正左转/右转，多观察位标定意义会很弱。
 
 运行后按终端提示操作：
 
