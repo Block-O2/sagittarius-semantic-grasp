@@ -178,9 +178,6 @@ class LanguageGuidedGraspNode:
         self.latest_image = None
         self.latest_header = None
 
-        self.backend = self._create_perception_backend()
-        self.observation_views = self._build_observation_views()
-
         self.executor = None
         if self.execute_grasp:
             self.executor = SagittariusGraspExecutor(
@@ -198,6 +195,9 @@ class LanguageGuidedGraspNode:
                 rospy.logwarn(
                     "Multiple observation views are configured, but only the front/current view can be used without robot motion"
                 )
+
+        self.backend = self._create_perception_backend()
+        self.observation_views = self._build_observation_views()
 
         self.target_sub = rospy.Subscriber(
             self.target_topic,

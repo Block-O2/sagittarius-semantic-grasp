@@ -3,10 +3,10 @@
   <arg name="robot_name" default="sgr532"/>
   <arg name="robot_model" default="$(arg robot_name)"/>
   <arg name="node_name" default="language_guided_grasp_node"/>
+  <arg name="sgr_ctrl_init_pose" default="true"/>
   <include file="$(find sagittarius_moveit)/launch/demo_true.launch" />
   <node pkg="sagittarius_object_color_detector" type="sgr_ctrl.py" name="sgr_ctrl_node" output="screen" ns="$(arg robot_name)">
-    <!-- Avoid forcing the arm to home before multi-view observation starts. -->
-    <param name="init_pose" value="false"/>
+    <param name="init_pose" value="$(arg sgr_ctrl_init_pose)"/>
   </node>
 
   <!-- 摄像头 -->
