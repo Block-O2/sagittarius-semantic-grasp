@@ -4,14 +4,17 @@
   <arg name="robot_model" default="$(arg robot_name)"/>
   <arg name="node_name" default="language_guided_grasp_node"/>
   <include file="$(find sagittarius_moveit)/launch/demo_true.launch" />
-  <node pkg="sagittarius_object_color_detector" type="sgr_ctrl.py" name="sgr_ctrl_node" output="screen" ns="$(arg robot_name)"/>
+  <node pkg="sagittarius_object_color_detector" type="sgr_ctrl.py" name="sgr_ctrl_node" output="screen" ns="$(arg robot_name)">
+    <!-- Avoid forcing the arm to home before multi-view observation starts. -->
+    <param name="init_pose" value="false"/>
+  </node>
 
   <!-- 摄像头 -->
-  <arg name="video_dev" default="/dev/usb_cam" />
+  <arg name="video_dev" default="/dev/video0" />
   <arg name="image_width" default="640" />
   <arg name="image_height" default="480" />
-  <arg name="framerate" default="30" />
-  <arg name="pixel_format" default="yuyv" />
+  <arg name="framerate" default="10" />
+  <arg name="pixel_format" default="mjpeg" />
   <arg name="io_method" default="mmap" />
   <arg name="usb_cam_output" default="log" />
   <arg name="usb_cam_stderr_log" default="$(env HOME)/.ros/log/usb_cam_stderr.log" />
@@ -29,8 +32,8 @@
   <!-- 抓取例程 -->
   <arg name="vision_config" default="$(find sagittarius_object_color_detector)/config/vision_config.yaml"/>
   <arg name="perception_backend" default="grounding_dino"/>
-  <arg name="groundingdino_config" default="$(env HOME)/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py"/>
-  <arg name="groundingdino_weights" default="$(env HOME)/GroundingDINO/weights/groundingdino_swint_ogc.pth"/>
+  <arg name="groundingdino_config" default="/mnt/d/ai_models/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py"/>
+  <arg name="groundingdino_weights" default="/mnt/d/ai_models/GroundingDINO/weights/groundingdino_swint_ogc.pth"/>
   <arg name="default_target_text" default=""/>
   <arg name="target_topic" default="/grasp_target_text"/>
   <arg name="device" default="cuda"/>
@@ -51,7 +54,7 @@
   <arg name="allow_start_without_groundingdino" default="false"/>
   <arg name="allow_start_without_backend" default="$(arg allow_start_without_groundingdino)"/>
   <arg name="execute_grasp" default="true"/>
-  <arg name="search_pose_mode" default="none"/>
+  <arg name="search_pose_mode" default="xyz_rpy"/>
   <arg name="search_pose_x" default="0.20"/>
   <arg name="search_pose_y" default="0.00"/>
   <arg name="search_pose_z" default="0.15"/>
