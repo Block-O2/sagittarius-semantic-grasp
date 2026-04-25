@@ -156,6 +156,25 @@ class SagittariusGraspExecutor:
             return False
         return True
 
+    def execute_rejection_gesture(self, yaw_delta=0.30, cycles=1, pause_sec=0.15):
+        base_pose = dict(self.search_pose)
+        poses = []
+        for _ in range(max(1, int(cycles))):
+            left_pose = dict(base_pose)
+            left_pose["yaw"] = float(base_pose["yaw"]) + float(yaw_delta)
+            right_pose = dict(base_pose)
+            right_pose["yaw"] = float(base_pose["yaw"]) - float(yaw_delta)
+            poses.extend([left_pose, right_pose])
+        poses.append(base_pose)
+
+        success = True
+        for index, pose in enumerate(poses, start=1):
+            moved = self.move_to_pose(pose, "rejection gesture step {}".format(index))
+            success = success and moved
+            if pause_sec > 0.0:
+                rospy.sleep(pause_sec)
+        return success
+
     def _send_goal(self, goal, timeout_sec=30.0):
         self.client.send_goal_and_wait(goal, rospy.Duration.from_sec(timeout_sec))
         result = self.client.get_result()

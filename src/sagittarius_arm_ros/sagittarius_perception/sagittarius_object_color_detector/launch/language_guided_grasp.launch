@@ -67,6 +67,10 @@
   <arg name="drop_y" default="0.24"/>
   <arg name="drop_z" default="0.20"/>
   <arg name="dynamic_place_z" default="$(arg drop_z)"/>
+  <arg name="rejection_motion_enabled" default="true"/>
+  <arg name="rejection_yaw_delta" default="0.30"/>
+  <arg name="rejection_cycles" default="1"/>
+  <arg name="rejection_pause_sec" default="0.15"/>
   <arg name="scan_view_order" default="front,left,right"/>
   <arg name="scan_attempts_per_view" default="5"/>
   <arg name="scan_stable_required" default="3"/>
@@ -132,6 +136,10 @@
     <param name ="drop_y" value = "$(arg drop_y)"/>
     <param name ="drop_z" value = "$(arg drop_z)"/>
     <param name ="dynamic_place_z" value = "$(arg dynamic_place_z)"/>
+    <param name ="rejection_motion_enabled" value = "$(arg rejection_motion_enabled)"/>
+    <param name ="rejection_yaw_delta" value = "$(arg rejection_yaw_delta)"/>
+    <param name ="rejection_cycles" value = "$(arg rejection_cycles)"/>
+    <param name ="rejection_pause_sec" value = "$(arg rejection_pause_sec)"/>
     <param name ="scan_view_order" value = "$(arg scan_view_order)"/>
     <param name ="scan_attempts_per_view" value = "$(arg scan_attempts_per_view)"/>
     <param name ="scan_stable_required" value = "$(arg scan_stable_required)"/>

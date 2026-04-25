@@ -17,8 +17,8 @@ from perception_framework.coordinate_mapping import VisionPlaneMapper
 from perception_framework.decision import evaluate_target_selection
 from perception_framework.execution import SagittariusGraspExecutor
 from perception_framework.stability import CenterStabilityFilter
-from perception_framework.task_parsing import TaskCommand, parse_task_command
-from perception_framework.visualization import draw_detection_overlay
+from perception_framework.task_parsing import TaskCommand, TaskStep, parse_task_command
+from perception_framework.visualization import draw_detection_overlay, draw_status_banner
 
 
 STATE_WAITING_FOR_TARGET = "waiting_for_target"
@@ -97,6 +97,17 @@ class LanguageGuidedGraspNode:
         )
         self.dynamic_place_z = float(
             rospy.get_param("~dynamic_place_z", self.drop_position[2])
+        )
+        self.rejection_motion_enabled = self._get_bool_param(
+            "~rejection_motion_enabled", True
+        )
+        self.rejection_yaw_delta = float(
+            rospy.get_param("~rejection_yaw_delta", 0.30)
+        )
+        self.rejection_cycles = max(1, int(rospy.get_param("~rejection_cycles", 1)))
+        self.rejection_pause_sec = max(
+            0.0,
+            float(rospy.get_param("~rejection_pause_sec", 0.15)),
         )
         self.clear_target_after_success = self._get_bool_param(
             "~clear_target_after_success", True
@@ -439,52 +450,66 @@ class LanguageGuidedGraspNode:
                 self._set_state(STATE_FAILED, "perception_backend_not_ready")
                 return
 
-            if len(task.pick_target_text) < self.min_target_text_length:
-                result_reason = "invalid pick target"
-                self._set_state(STATE_FAILED, "invalid_pick_target")
-                return
-            if (
-                task.place_target_text
-                and len(task.place_target_text) < self.min_target_text_length
-            ):
-                result_reason = "invalid place target"
-                self._set_state(STATE_FAILED, "invalid_place_target")
-                return
-
             rospy.loginfo(
-                "Processing task '%s' -> pick='%s'%s",
+                "Processing task '%s' with %d step(s): %s",
                 task.raw_text,
-                task.pick_target_text,
-                ", place='{}'".format(task.place_target_text)
-                if task.place_target_text
-                else "",
+                len(task.steps),
+                self._describe_task(task),
             )
 
-            pick_observation = self._locate_target_across_views(
-                task.pick_target_text,
-                "pick",
-            )
-            if pick_observation is None:
-                result_reason = "pick target not found"
-                self._set_state(STATE_FAILED, "pick_target_not_found")
-                return
-
-            place_observation = None
-            if task.is_pick_and_place:
-                place_observation = self._locate_target_across_views(
-                    task.place_target_text,
-                    "place",
-                )
-                if place_observation is None:
-                    result_reason = "place target not found"
-                    self._set_state(STATE_FAILED, "place_target_not_found")
+            for step_index, step in enumerate(task.steps, start=1):
+                if len(step.pick_target_text) < self.min_target_text_length:
+                    result_reason = "invalid pick target"
+                    self._set_state(STATE_FAILED, "invalid_pick_target")
+                    return
+                if (
+                    step.place_target_text
+                    and len(step.place_target_text) < self.min_target_text_length
+                ):
+                    result_reason = "invalid place target"
+                    self._set_state(STATE_FAILED, "invalid_place_target")
                     return
 
-            task_success, dry_run_success, result_reason = self._execute_task(
-                task,
-                pick_observation,
-                place_observation,
-            )
+                pick_observation = self._locate_target_across_views(
+                    step.pick_target_text,
+                    "pick step {}".format(step_index),
+                )
+                if pick_observation is None:
+                    result_reason = "pick target '{}' not found".format(
+                        step.pick_target_text
+                    )
+                    self._set_state(STATE_FAILED, "pick_target_not_found")
+                    self._reject_current_request(result_reason)
+                    return
+
+                place_observation = None
+                if step.is_pick_and_place:
+                    place_observation = self._locate_target_across_views(
+                        step.place_target_text,
+                        "place step {}".format(step_index),
+                    )
+                    if place_observation is None:
+                        result_reason = "place target '{}' not found".format(
+                            step.place_target_text
+                        )
+                        self._set_state(STATE_FAILED, "place_target_not_found")
+                        self._reject_current_request(result_reason)
+                        return
+
+                step_success, step_dry_run, step_reason = self._execute_task(
+                    step,
+                    pick_observation,
+                    place_observation,
+                    step_index=step_index,
+                    total_steps=len(task.steps),
+                )
+                if not step_success and not step_dry_run:
+                    result_reason = step_reason
+                    return
+                dry_run_success = dry_run_success or step_dry_run
+
+            task_success = True
+            result_reason = "completed {} task step(s)".format(len(task.steps))
         finally:
             self._finalize_task(
                 target_text,
@@ -608,14 +633,18 @@ class LanguageGuidedGraspNode:
                 rospy.sleep(self.scan_retry_interval)
         return None
 
-    def _execute_task(self, task: TaskCommand, pick_observation, place_observation):
+    def _execute_task(self, step: TaskStep, pick_observation, place_observation, step_index=1, total_steps=1):
         self._set_state(
             STATE_GRASPING,
-            "executing pick for '{}'".format(task.pick_target_text),
+            "executing pick step {}/{} for '{}'".format(
+                step_index,
+                total_steps,
+                step.pick_target_text,
+            ),
         )
         rospy.loginfo(
             "Pick target '%s' selected from %s view: x=%.4f, y=%.4f, z=%.4f",
-            task.pick_target_text,
+            step.pick_target_text,
             pick_observation.view_name,
             pick_observation.arm_x,
             pick_observation.arm_y,
@@ -624,7 +653,7 @@ class LanguageGuidedGraspNode:
         if place_observation is not None:
             rospy.loginfo(
                 "Place target '%s' selected from %s view: x=%.4f, y=%.4f, z=%.4f",
-                task.place_target_text,
+                step.place_target_text,
                 place_observation.view_name,
                 place_observation.arm_x,
                 place_observation.arm_y,
@@ -643,14 +672,18 @@ class LanguageGuidedGraspNode:
             orientation_mode=self.pick_orientation_mode,
         )
         if not pick_success:
-            rospy.logwarn("Grasp failed for target '%s'", task.pick_target_text)
+            rospy.logwarn("Grasp failed for target '%s'", step.pick_target_text)
             return False, False, "grasp failed"
 
-        rospy.loginfo("Grasp succeeded for target '%s'", task.pick_target_text)
+        rospy.loginfo("Grasp succeeded for target '%s'", step.pick_target_text)
         if place_observation is not None:
             self._set_state(
                 STATE_PLACING,
-                "placing into '{}'".format(task.place_target_text),
+                "placing step {}/{} into '{}'".format(
+                    step_index,
+                    total_steps,
+                    step.place_target_text,
+                ),
             )
             place_success = self.executor.execute_drop_at(
                 place_observation.arm_x,
@@ -660,14 +693,17 @@ class LanguageGuidedGraspNode:
             if not place_success:
                 rospy.logwarn(
                     "Dynamic place failed for target '%s'",
-                    task.place_target_text,
+                    step.place_target_text,
                 )
                 return False, False, "dynamic place failed"
             rospy.loginfo(
                 "Dynamic place succeeded for target '%s'",
-                task.place_target_text,
+                step.place_target_text,
             )
-            return True, False, "pick and place succeeded"
+            return True, False, "step {}/{} pick and place succeeded".format(
+                step_index,
+                total_steps,
+            )
 
         if self.drop_after_grasp:
             self._set_state(STATE_PLACING, "executing fixed drop")
@@ -677,7 +713,20 @@ class LanguageGuidedGraspNode:
                 rospy.logwarn(
                     "Drop failed after grasp success, target will still be cleared"
                 )
-        return True, False, "grasp succeeded"
+        return True, False, "step {}/{} grasp succeeded".format(
+            step_index,
+            total_steps,
+        )
+
+    def _reject_current_request(self, reason_text):
+        rospy.logwarn("Rejecting current request: %s", reason_text)
+        if self.execute_grasp and self.rejection_motion_enabled and self.executor:
+            self.executor.execute_rejection_gesture(
+                yaw_delta=self.rejection_yaw_delta,
+                cycles=self.rejection_cycles,
+                pause_sec=self.rejection_pause_sec,
+            )
+        self._publish_status_observation("rejected: {}".format(reason_text))
 
     def _finalize_task(self, target_text, task_success, dry_run_success, result_reason):
         next_target = None
@@ -777,6 +826,31 @@ class LanguageGuidedGraspNode:
                     self.annotated_image_path,
                 )
 
+    def _publish_status_observation(self, text, banner_color=(0, 80, 220)):
+        cv_image, header = self._get_latest_image(timeout_sec=0.5)
+        if cv_image is None:
+            return
+        annotated = draw_status_banner(cv_image, text, banner_color=banner_color)
+        if self.annotated_image_pub is not None:
+            try:
+                annotated_msg = self.bridge.cv2_to_imgmsg(annotated, encoding="bgr8")
+                if header is not None:
+                    annotated_msg.header = header
+                self.annotated_image_pub.publish(annotated_msg)
+            except CvBridgeError as exc:
+                rospy.logwarn_throttle(
+                    5.0,
+                    "Failed to publish status image: %s",
+                    exc,
+                )
+        if self.save_annotated_image:
+            if not cv2.imwrite(self.annotated_image_path, annotated):
+                rospy.logwarn_throttle(
+                    5.0,
+                    "Failed to save status image to %s",
+                    self.annotated_image_path,
+                )
+
     def _log_selection_decision(self, target_text, decision, view_name="front"):
         rospy.loginfo(
             "Target '%s' not selected in %s view: status=%s, candidates=%d, reason=%s",
@@ -811,6 +885,21 @@ class LanguageGuidedGraspNode:
 
     def _normalize_target_text(self, text):
         return text.strip()
+
+    def _describe_task(self, task: TaskCommand):
+        parts = []
+        for index, step in enumerate(task.steps, start=1):
+            if step.place_target_text:
+                parts.append(
+                    "{}: '{}' -> '{}'".format(
+                        index,
+                        step.pick_target_text,
+                        step.place_target_text,
+                    )
+                )
+            else:
+                parts.append("{}: '{}'".format(index, step.pick_target_text))
+        return "; ".join(parts)
 
     def _get_bool_param(self, name, default):
         value = rospy.get_param(name, default)

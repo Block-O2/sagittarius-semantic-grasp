@@ -60,6 +60,12 @@ def draw_detection_overlay(image_bgr, result, target_text, decision: SelectionDe
     return annotated
 
 
+def draw_status_banner(image_bgr, text, banner_color=(40, 80, 220)):
+    annotated = image_bgr.copy()
+    _draw_banner(annotated, text, banner_color)
+    return annotated
+
+
 def _box_color(status, is_selected):
     if not is_selected:
         return (180, 180, 180)
