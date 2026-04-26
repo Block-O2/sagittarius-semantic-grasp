@@ -24,28 +24,32 @@ VISION_CONFIG="${VISION_CONFIG:-$PACKAGE_DIR/config/vision_config_pick_front.yam
 # Use the old color-grasp XYZ/RPY search pose by default so the arm camera
 # looks toward the table. Avoid the legacy DEFINE_STAY joint preset because it
 # can fold the arm upward and point the camera at the ceiling.
-SEARCH_POSE_MODE="${SEARCH_POSE_MODE:-camera_down}"
+SEARCH_POSE_MODE="${SEARCH_POSE_MODE:-xyz_rpy}"
 SEARCH_POSE_X="${SEARCH_POSE_X:-0.20}"
 SEARCH_POSE_Y="${SEARCH_POSE_Y:-0.00}"
-SEARCH_POSE_Z="${SEARCH_POSE_Z:-0.20}"
+SEARCH_POSE_Z="${SEARCH_POSE_Z:-0.22}"
 SEARCH_POSE_ROLL="${SEARCH_POSE_ROLL:-0.0}"
 SEARCH_POSE_PITCH="${SEARCH_POSE_PITCH:-1.57}"
 SEARCH_POSE_YAW="${SEARCH_POSE_YAW:-0.0}"
 RETURN_TO_SEARCH_POSE_AFTER_GRASP="${RETURN_TO_SEARCH_POSE_AFTER_GRASP:-false}"
-PICK_ORIENTATION_MODE="${PICK_ORIENTATION_MODE:-auto}"
+PICK_ORIENTATION_MODE="${PICK_ORIENTATION_MODE:-fixed}"
 DROP_AFTER_GRASP="${DROP_AFTER_GRASP:-false}"
+SGR_CTRL_INIT_POSE="${SGR_CTRL_INIT_POSE:-true}"
+MOVE_TO_SEARCH_POSE_ON_STARTUP="${MOVE_TO_SEARCH_POSE_ON_STARTUP:-true}"
 PLACE_FRONT_VIEW_ENABLED="${PLACE_FRONT_VIEW_ENABLED:-true}"
 PLACE_FRONT_VIEW_VISION_CONFIG="${PLACE_FRONT_VIEW_VISION_CONFIG:-$PACKAGE_DIR/config/vision_config_place_front.yaml}"
 PLACE_FRONT_VIEW_X="${PLACE_FRONT_VIEW_X:-0.20}"
 PLACE_FRONT_VIEW_Y="${PLACE_FRONT_VIEW_Y:-0.00}"
-PLACE_FRONT_VIEW_Z="${PLACE_FRONT_VIEW_Z:-0.20}"
+PLACE_FRONT_VIEW_Z="${PLACE_FRONT_VIEW_Z:-0.22}"
 PLACE_FRONT_VIEW_ROLL="${PLACE_FRONT_VIEW_ROLL:-0.0}"
 PLACE_FRONT_VIEW_PITCH="${PLACE_FRONT_VIEW_PITCH:-1.57}"
 PLACE_FRONT_VIEW_YAW="${PLACE_FRONT_VIEW_YAW:-0.0}"
 PLACE_SCAN_VIEW_ORDER="${PLACE_SCAN_VIEW_ORDER:-front}"
-SCAN_ATTEMPTS_PER_VIEW="${SCAN_ATTEMPTS_PER_VIEW:-5}"
-SCAN_STABLE_REQUIRED="${SCAN_STABLE_REQUIRED:-3}"
-SCAN_SETTLE_SEC="${SCAN_SETTLE_SEC:-0.8}"
+SCAN_ATTEMPTS_PER_VIEW="${SCAN_ATTEMPTS_PER_VIEW:-2}"
+SCAN_STABLE_REQUIRED="${SCAN_STABLE_REQUIRED:-2}"
+SCAN_SETTLE_SEC="${SCAN_SETTLE_SEC:-0.2}"
+REJECTION_MOTION_ENABLED="${REJECTION_MOTION_ENABLED:-false}"
+RELATIVE_PLACE_OFFSET_Y="${RELATIVE_PLACE_OFFSET_Y:-0.05}"
 LEFT_VIEW_ENABLED="${LEFT_VIEW_ENABLED:-false}"
 LEFT_VIEW_VISION_CONFIG="${LEFT_VIEW_VISION_CONFIG:-}"
 LEFT_VIEW_X="${LEFT_VIEW_X:-0.23}"
@@ -81,6 +85,7 @@ export TRANSFORMERS_OFFLINE
 mkdir -p "$MPLCONFIGDIR"
 
 roslaunch sagittarius_object_color_detector language_guided_grasp.launch \
+  sgr_ctrl_init_pose:="$SGR_CTRL_INIT_POSE" \
   device:="$DEVICE" \
   video_dev:="$VIDEO_DEV" \
   pixel_format:="$PIXEL_FORMAT" \
@@ -93,6 +98,7 @@ roslaunch sagittarius_object_color_detector language_guided_grasp.launch \
   min_grasp_score:=0.35 \
   vision_config:="$VISION_CONFIG" \
   execute_grasp:="$EXECUTE_GRASP" \
+  move_to_search_pose_on_startup:="$MOVE_TO_SEARCH_POSE_ON_STARTUP" \
   search_pose_mode:="$SEARCH_POSE_MODE" \
   search_pose_x:="$SEARCH_POSE_X" \
   search_pose_y:="$SEARCH_POSE_Y" \
@@ -104,6 +110,8 @@ roslaunch sagittarius_object_color_detector language_guided_grasp.launch \
   pick_orientation_mode:="$PICK_ORIENTATION_MODE" \
   drop_after_grasp:="$DROP_AFTER_GRASP" \
   dynamic_place_z:="${DYNAMIC_PLACE_Z:-0.20}" \
+  relative_place_offset_y:="$RELATIVE_PLACE_OFFSET_Y" \
+  rejection_motion_enabled:="$REJECTION_MOTION_ENABLED" \
   place_front_view_enabled:="$PLACE_FRONT_VIEW_ENABLED" \
   place_front_view_vision_config:="$PLACE_FRONT_VIEW_VISION_CONFIG" \
   place_front_view_x:="$PLACE_FRONT_VIEW_X" \

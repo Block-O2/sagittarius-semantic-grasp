@@ -30,7 +30,7 @@
   </include>
 
   <!-- 抓取例程 -->
-  <arg name="vision_config" default="$(find sagittarius_object_color_detector)/config/vision_config.yaml"/>
+  <arg name="vision_config" default="$(find sagittarius_object_color_detector)/config/vision_config_pick_front.yaml"/>
   <arg name="perception_backend" default="grounding_dino"/>
   <arg name="groundingdino_config" default="/mnt/d/ai_models/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py"/>
   <arg name="groundingdino_weights" default="/mnt/d/ai_models/GroundingDINO/weights/groundingdino_swint_ogc.pth"/>
@@ -91,19 +91,19 @@
   <arg name="rejection_cycles" default="1"/>
   <arg name="rejection_pause_sec" default="0.15"/>
   <arg name="place_front_view_enabled" default="true"/>
-  <arg name="place_front_view_vision_config" default="$(arg vision_config)"/>
+  <arg name="place_front_view_vision_config" default="$(find sagittarius_object_color_detector)/config/vision_config_place_front.yaml"/>
   <arg name="place_front_view_x" default="0.20"/>
   <arg name="place_front_view_y" default="0.00"/>
   <arg name="place_front_view_z" default="0.22"/>
   <arg name="place_front_view_roll" default="0.0"/>
   <arg name="place_front_view_pitch" default="1.57"/>
   <arg name="place_front_view_yaw" default="0.0"/>
-  <arg name="place_scan_view_order" default="front,left,right"/>
-  <arg name="scan_view_order" default="front,left,right"/>
-  <arg name="scan_attempts_per_view" default="5"/>
-  <arg name="scan_stable_required" default="3"/>
+  <arg name="place_scan_view_order" default="front"/>
+  <arg name="scan_view_order" default="front"/>
+  <arg name="scan_attempts_per_view" default="2"/>
+  <arg name="scan_stable_required" default="2"/>
   <arg name="scan_retry_interval" default="0.2"/>
-  <arg name="scan_settle_sec" default="0.8"/>
+  <arg name="scan_settle_sec" default="0.2"/>
   <arg name="left_view_enabled" default="false"/>
   <arg name="left_view_vision_config" default=""/>
   <arg name="left_view_x" default="0.23"/>
