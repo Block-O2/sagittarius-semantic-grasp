@@ -53,6 +53,26 @@ RELATIVE_PLACE_PATTERNS = (
     ),
 )
 
+SAME_COLOR_TASK_PATTERNS = (
+    re.compile(
+        r"^\s*(?:please\s+)?(?:put|place|drop|sort)\s+(?:the\s+)?(?:three\s+)?(?:colored|coloured|color)\s+blocks?\s+(?:into|in|inside)\s+(?:the\s+)?buckets?\s+of\s+(?:the\s+)?same\s+colou?r\s*$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^\s*(?:please\s+)?(?:put|place|drop|sort)\s+(?:each|every)\s+block\s+(?:into|in|inside)\s+(?:the\s+)?bucket\s+of\s+(?:the\s+)?same\s+colou?r\s*$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^\s*(?:请)?(?:把|将)?(?:桌上)?(?:三种颜色|不同颜色|各色)?(?:的)?方块(?:分别)?(?:放到|放进|放入)(?:相同颜色|同色|对应颜色)(?:的)?桶(?:里面|里|中)?\s*$"
+    ),
+)
+
+DEFAULT_SAME_COLOR_MATCHES = (
+    ("red block", "red bucket"),
+    ("blue block", "blue bucket"),
+    ("green block", "green bucket"),
+)
+
 
 @dataclass
 class TaskStep:
@@ -86,6 +106,9 @@ class TaskCommand:
 
 def parse_task_command(text: str) -> TaskCommand:
     normalized = _normalize_phrase(text)
+    same_color_steps = _parse_same_color_task(normalized)
+    if same_color_steps:
+        return TaskCommand(raw_text=normalized, steps=same_color_steps)
     steps = []
     for segment in _split_multi_step_segments(normalized):
         step = _parse_single_step(segment)
@@ -168,3 +191,14 @@ def _parse_place_target(text: str):
         if direction.startswith("右") or direction == "right":
             return None, "right_of", reference
     return _normalize_place_target(cleaned), None, None
+
+
+def _parse_same_color_task(text: str):
+    cleaned = _normalize_phrase(text)
+    for pattern in SAME_COLOR_TASK_PATTERNS:
+        if pattern.match(cleaned):
+            return [
+                TaskStep(pick_target_text=pick, place_target_text=place)
+                for pick, place in DEFAULT_SAME_COLOR_MATCHES
+            ]
+    return None
