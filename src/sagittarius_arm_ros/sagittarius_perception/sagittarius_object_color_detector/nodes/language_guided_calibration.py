@@ -31,8 +31,10 @@ from manual_vision_calibration import (
     mean_abs_error,
     save_yaml_with_backup,
 )
+from perception_framework.center_refinement import refine_detection_center
 from perception_framework.backend_factory import create_backend
 from perception_framework.backends.base import BackendConfig
+from perception_framework.coordinate_mapping import VisionPlaneMapper
 from perception_framework.decision import evaluate_target_selection
 from perception_framework.visualization import draw_detection_overlay
 
@@ -136,6 +138,7 @@ class LanguageGuidedCalibration:
             ),
         )
         self.backend = create_backend(backend_config)
+        self.vision_mapper = VisionPlaneMapper(self.vision_config)
 
         action_name = "{}/sgr_ctrl".format(self.arm_name)
         self.client = actionlib.SimpleActionClient(action_name, SGRCtrlAction)
@@ -242,6 +245,12 @@ class LanguageGuidedCalibration:
                 cv2.imwrite(annotated_path, annotated)
 
             if decision.should_execute:
+                refine_detection_center(
+                    image,
+                    decision.selected_box,
+                    self.target_text,
+                    self.vision_mapper,
+                )
                 center = decision.selected_box.center
                 return (
                     float(center[0]),

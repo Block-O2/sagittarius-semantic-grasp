@@ -21,6 +21,14 @@ class DetectionBox:
 
     @property
     def center(self) -> Point2D:
+        refined_center = self.metadata.get("refined_center")
+        if refined_center is not None:
+            return float(refined_center[0]), float(refined_center[1])
+        x1, y1, x2, y2 = self.bbox_xyxy
+        return (x1 + x2) / 2.0, (y1 + y2) / 2.0
+
+    @property
+    def raw_center(self) -> Point2D:
         x1, y1, x2, y2 = self.bbox_xyxy
         return (x1 + x2) / 2.0, (y1 + y2) / 2.0
 
@@ -50,4 +58,3 @@ class DetectionResult:
     @property
     def scores(self) -> List[float]:
         return [box.score for box in self.boxes]
-

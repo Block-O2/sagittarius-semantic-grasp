@@ -14,6 +14,7 @@ from std_msgs.msg import String
 from perception_framework.backends.base import BackendConfig
 from perception_framework.backend_factory import create_backend
 from perception_framework.coordinate_mapping import VisionPlaneMapper
+from perception_framework.center_refinement import refine_detection_center
 from perception_framework.decision import evaluate_target_selection
 from perception_framework.execution import SagittariusGraspExecutor
 from perception_framework.stability import CenterStabilityFilter
@@ -793,6 +794,12 @@ class LanguageGuidedGraspNode:
                 )
             else:
                 selected_box = decision.selected_box
+                refine_detection_center(
+                    cv_image,
+                    selected_box,
+                    target_text,
+                    view["mapper"],
+                )
                 stability_filter.add(selected_box.center)
                 if stability_filter.is_stable():
                     stable_center = stability_filter.average_center()

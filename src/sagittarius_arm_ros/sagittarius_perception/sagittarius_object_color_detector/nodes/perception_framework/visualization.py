@@ -51,7 +51,10 @@ def draw_detection_overlay(image_bgr, result, target_text, decision: SelectionDe
             cy = int(round(max(0.0, min(float(height - 1), cy))))
             cv2.circle(annotated, (cx, cy), 6, color, -1)
             cv2.circle(annotated, (cx, cy), 10, (255, 255, 255), 2)
-            _draw_label(annotated, "center ({}, {})".format(cx, cy), cx + 8, cy - 8, color)
+            center_label = "center ({}, {})".format(cx, cy)
+            if box.metadata.get("refined_center_source"):
+                center_label += " refined"
+            _draw_label(annotated, center_label, cx + 8, cy - 8, color)
 
         if index >= 20:
             _draw_label(annotated, "... more candidates omitted", 12, height - 12, (180, 180, 180))

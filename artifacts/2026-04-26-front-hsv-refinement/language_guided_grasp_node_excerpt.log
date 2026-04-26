@@ -1,0 +1,17 @@
+[rosout][INFO] 2026-04-26 18:18:55,089: Loaded perception backend 'grounding_dino' on cuda
+[rosout][INFO] 2026-04-26 18:18:55,092: Loaded pick_front mapper from /home/hank/sagittarius_ws/src/sagittarius_arm_ros/sagittarius_perception/sagittarius_object_color_detector/config/vision_config_pick_front.yaml: x=k1*pixel_y+b1 (k1=-0.000275, b1=0.325377), y=k2*pixel_x+b2 (k2=-0.000296, b2=0.085188)
+[rosout][INFO] 2026-04-26 18:18:55,097: Loaded front mapper from /home/hank/sagittarius_ws/src/sagittarius_arm_ros/sagittarius_perception/sagittarius_object_color_detector/config/vision_config_place_front.yaml: x=k1*pixel_y+b1 (k1=-0.000280, b1=0.324302), y=k2*pixel_x+b2 (k2=-0.000267, b2=0.074890)
+[rosout][INFO] 2026-04-26 18:19:04,448: Processing task 'put each block into the bucket of the same color' with 3 step(s): 1: 'red block' -> 'red bucket'; 2: 'blue block' -> 'blue bucket'; 3: 'green block' -> 'green bucket'
+[rosout][INFO] 2026-04-26 18:19:09,120: Locked pick step 1 target 'red block' in pick_front view at pixel center (64.5, 434.5), mapped to x=0.2057, y=0.0661, score=0.513, label='red block'
+[rosout][INFO] 2026-04-26 18:19:22,335: Grasp succeeded for target 'red block'
+[rosout][INFO] 2026-04-26 18:19:25,817: Locked place step 1 target 'red bucket' in front view at pixel center (597.8, 97.7), mapped to x=0.2969, y=-0.0846, score=0.785, label='red bucket'
+[rosout][INFO] 2026-04-26 18:19:40,316: Dynamic place succeeded for target 'red bucket'
+[rosout][INFO] 2026-04-26 18:19:44,824: Locked pick step 2 target 'blue block' in pick_front view at pixel center (525.5, 431.3), mapped to x=0.2066, y=-0.0702, score=0.680, label='blue block'
+[rosout][INFO] 2026-04-26 18:19:57,831: Grasp succeeded for target 'blue block'
+[rosout][INFO] 2026-04-26 18:20:01,203: Locked place step 2 target 'blue bucket' in front view at pixel center (69.5, 285.7), mapped to x=0.2442, y=0.0564, score=0.425, label='blue bucket'
+[rosout][INFO] 2026-04-26 18:20:12,416: Dynamic place succeeded for target 'blue bucket'
+[rosout][INFO] 2026-04-26 18:20:16,622: Locked pick step 3 target 'green block' in pick_front view at pixel center (369.0, 277.4), mapped to x=0.2490, y=-0.0239, score=0.850, label='green block'
+[rosout][INFO] 2026-04-26 18:20:29,428: Grasp succeeded for target 'green block'
+[rosout][INFO] 2026-04-26 18:20:32,599: Pipeline state -> failed: place_target_not_found
+[rosout][WARNING] 2026-04-26 18:20:32,600: Rejecting current request: place target 'green bucket' not found
+[rosout][INFO] 2026-04-26 18:20:32,603: Pipeline state -> failed: place target 'green bucket' not found
