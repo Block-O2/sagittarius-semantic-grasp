@@ -231,6 +231,8 @@ class LanguageGuidedGraspNode:
         self.latest_header = None
         self.pick_view = None
         self.observation_views = []
+        self.startup_pick_view_ready = False
+        self.use_current_pose_for_next_pick_view = False
 
         self.executor = None
         if self.execute_grasp:
@@ -241,7 +243,20 @@ class LanguageGuidedGraspNode:
                 search_pose=self.search_pose,
             )
             if self.move_to_search_pose_on_startup:
-                self.executor.move_to_search_pose(self.search_pose_mode)
+                self.startup_pick_view_ready = self.executor.move_to_search_pose(
+                    self.search_pose_mode
+                )
+                self.use_current_pose_for_next_pick_view = (
+                    self.startup_pick_view_ready
+                )
+                if self.startup_pick_view_ready:
+                    rospy.loginfo(
+                        "Startup initialization completed: robot reached the configured observation pose and is ready for the next target command"
+                    )
+                else:
+                    rospy.logwarn(
+                        "Startup initialization failed to reach the configured observation pose; later pick-view motion may retry from the current pose"
+                    )
             else:
                 rospy.loginfo(
                     "Startup will keep the current/home pose; observation view scanning begins after a target command arrives"
@@ -640,19 +655,41 @@ class LanguageGuidedGraspNode:
     def _move_to_pick_view(self):
         if self.executor is None:
             return True
+        if self.use_current_pose_for_next_pick_view:
+            self.use_current_pose_for_next_pick_view = False
+            rospy.loginfo(
+                "Using the current startup observation pose for this pick request"
+            )
+            if self.scan_settle_sec > 0.0:
+                rospy.sleep(self.scan_settle_sec)
+            return True
         search_mode = self.pick_view["search_mode"].strip().lower()
-        if search_mode in ("camera_down", "table_view", "down", "xyz_rpy", "search", "legacy"):
-            intermediate_pose = (
-                self.pick_intermediate_pose if self.pick_view_via_intermediate else None
-            )
-            moved = self.executor.move_to_pose_with_retries(
-                self.pick_view["pose"],
-                label="camera/table search pose",
-                retries=self.pick_view_move_retries,
-                retry_interval=self.pick_view_retry_interval,
-                intermediate_pose=intermediate_pose,
-                allow_direct_fallback=self.pick_view_allow_direct_fallback,
-            )
+        if search_mode in (
+            "camera_down",
+            "table_view",
+            "down",
+            "xyz_rpy",
+            "search",
+            "legacy",
+        ):
+            if self.pick_view_via_intermediate:
+                moved = self.executor.move_to_pose_with_retries(
+                    self.pick_view["pose"],
+                    label="camera/table search pose",
+                    retries=self.pick_view_move_retries,
+                    retry_interval=self.pick_view_retry_interval,
+                    intermediate_pose=self.pick_intermediate_pose,
+                    allow_direct_fallback=self.pick_view_allow_direct_fallback,
+                )
+            else:
+                moved = self.executor.move_to_pose_with_retries(
+                    self.pick_view["pose"],
+                    label="camera/table search pose",
+                    retries=self.pick_view_move_retries,
+                    retry_interval=self.pick_view_retry_interval,
+                    intermediate_pose=None,
+                    allow_direct_fallback=self.pick_view_allow_direct_fallback,
+                )
         else:
             attempts = max(1, self.pick_view_move_retries)
             moved = False

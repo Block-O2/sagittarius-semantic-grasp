@@ -3,7 +3,7 @@
   <arg name="robot_name" default="sgr532"/>
   <arg name="robot_model" default="$(arg robot_name)"/>
   <arg name="node_name" default="language_guided_grasp_node"/>
-  <arg name="sgr_ctrl_init_pose" default="false"/>
+  <arg name="sgr_ctrl_init_pose" default="true"/>
   <include file="$(find sagittarius_moveit)/launch/demo_true.launch" />
   <node pkg="sagittarius_object_color_detector" type="sgr_ctrl.py" name="sgr_ctrl_node" output="screen" ns="$(arg robot_name)">
     <param name="init_pose" value="$(arg sgr_ctrl_init_pose)"/>
@@ -56,7 +56,7 @@
   <arg name="allow_start_without_groundingdino" default="false"/>
   <arg name="allow_start_without_backend" default="$(arg allow_start_without_groundingdino)"/>
   <arg name="execute_grasp" default="true"/>
-  <arg name="move_to_search_pose_on_startup" default="false"/>
+  <arg name="move_to_search_pose_on_startup" default="true"/>
   <arg name="search_pose_mode" default="xyz_rpy"/>
   <arg name="search_pose_x" default="0.20"/>
   <arg name="search_pose_y" default="0.00"/>
@@ -66,7 +66,7 @@
   <arg name="search_pose_yaw" default="0.0"/>
   <arg name="pick_view_via_intermediate" default="false"/>
   <arg name="pick_view_allow_direct_fallback" default="true"/>
-  <arg name="pick_view_recover_via_stay" default="true"/>
+  <arg name="pick_view_recover_via_stay" default="false"/>
   <arg name="pick_view_recover_pause_sec" default="0.4"/>
   <arg name="pick_view_move_retries" default="2"/>
   <arg name="pick_view_retry_interval" default="0.2"/>
