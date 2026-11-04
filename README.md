@@ -18,17 +18,13 @@ These are the three original recordings, not new runs. Video outcomes above foll
 
 *Original 640×480 camera snapshot from the April 26 experiment. It shows detection output, not a completed pick/place or a frame from the linked videos.*
 
-## My contributions
+## Features
 
-My work extended the Sagittarius color-grasping examples into a semantic perception-to-execution pipeline:
-
-- Integrated GroundingDINO behind a replaceable perception backend and added the `/grasp_target_text` command interface.
-- Added rule-based parsing for single-target, explicit pick/place, multi-step, same-color, and relative-placement commands.
-- Connected target selection, confidence filtering, stable-frame checks, pixel-to-plane mapping, and action dispatch.
-- Added HSV/contour center refinement inside selected boxes for known colors, with box-center fallback when refinement is unavailable.
-- Added manual calibration workflows and separate `pick_front` / `place_front` configurations; tested the front-view pipeline on the physical arm and preserved failure evidence.
-
-The robot SDK, robot model, MoveIt configuration, and original color-grasping / `sgr_ctrl` control backbone come from the Sagittarius ecosystem. This work integrates and extends that chain; it does not implement a hardware control framework from scratch. See [Attribution](docs/attribution.md).
+- **Language-conditioned perception:** GroundingDINO runs behind a replaceable perception backend, with commands received through `/grasp_target_text`.
+- **Rule-based task parsing:** Supports single-target, explicit pick/place, multi-step, same-color, and relative-placement commands.
+- **Perception-to-execution pipeline:** Target selection, confidence filtering, stable-frame checks, pixel-to-plane mapping, and action dispatch.
+- **Center refinement:** HSV/contour refinement inside selected boxes for known colors, with box-center fallback when refinement is unavailable.
+- **Calibration and front-view execution:** Manual calibration workflows and separate `pick_front` / `place_front` configurations, with physical-arm tests and recorded failure evidence.
 
 ## Architecture
 
@@ -92,4 +88,4 @@ The smoke check uses only the Python standard library, synthetic detections, and
 
 ## Attribution and license
 
-The existing [BSD-3-Clause LICENSE](LICENSE) retains NXROBO's copyright notice unchanged. Project integration and third-party components have distinct provenance; ROS, MoveIt, GroundingDINO, and external weights retain their own terms. See [component attribution and unresolved package metadata](docs/attribution.md).
+The hardware/control stack uses NXROBO's Sagittarius SDK, robot model, MoveIt configuration, and original color-grasping / `sgr_ctrl` backbone. See [component attribution and license scope](docs/attribution.md) and the existing [BSD-3-Clause license](LICENSE).
